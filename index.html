@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111d2b">
+  <meta name="description" content="Airplanes：原版净空飞行，以及英国与德国空军对战的二战像素飞行游戏。">
+  <title>Airplanes — 天空，无限可能</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+  <main id="app">
+    <section id="home-screen" class="screen home-screen" aria-label="游戏版本入口">
+      <header class="masthead">
+        <a class="brand" href="#home" aria-label="Airplanes 首页"><img src="./assets/favicon.svg" width="34" height="34" alt=""><span>AIRPLANES</span></a>
+        <nav aria-label="主导航"><a class="nav-link active" href="#home">版本入口</a><a class="nav-link" href="#hangar">机库</a><button class="nav-link" data-action="help">操作指南</button></nav>
+        <span class="build-label">FLIGHT ARCHIVE <b>01</b></span>
+      </header>
+      <div class="hero">
+        <canvas id="hero-canvas" width="440" height="260" aria-label="像素海岛与飞机飞行预览"></canvas>
+        <div class="hero-shade"></div>
+        <div class="hero-copy"><div class="eyebrow"><span class="live-dot"></span> YOUR SKY. YOUR STORY.</div><h1>每一次起飞，<br>都是新的故事。</h1><p>掠过云海，自在漫游。<br class="mobile-only">或者，飞向 1940 年的英吉利海峡。</p><a href="#versions" class="primary-link">选择你的航线 <span aria-hidden="true">↘</span></a></div>
+        <div class="hero-coordinate">50° N &nbsp; 01° E <span>THE CHANNEL</span></div>
+        <div class="hero-bottom"><span>PIXEL SKIES / OPEN HORIZONS</span><span>浏览器即刻起飞</span></div>
+      </div>
+      <section class="versions" id="versions" aria-labelledby="versions-title">
+        <div class="section-heading"><div><div class="eyebrow">CHOOSE YOUR FLIGHT</div><h2 id="versions-title">两片天空，同一种自由。</h2></div><span class="version-count">02 FLIGHT MODES</span></div>
+        <div class="version-grid">
+          <article class="version-card free-card"><div class="version-art free-art"><canvas id="free-preview" width="500" height="210" aria-label="原版飞行景色预览"></canvas><span class="version-tag">ORIGINAL · V0.1</span><div class="art-label">CLEAR SKIES</div></div><div class="version-body"><div class="version-title"><h3>净空体验</h3><span class="quiet-tag">自由飞行</span></div><p>保留原版的海岛、云层与喷气机。没有战斗目标，随心切换俯视、追尾和座舱视角。</p><div class="version-footer"><span>3 种视角 · 昼夜切换</span><button class="button button-light" id="start-free">自由起飞 <span aria-hidden="true">↗</span></button></div></div></article>
+          <article class="version-card battle-card"><div class="version-art battle-art"><canvas id="battle-preview" width="500" height="210" aria-label="英国喷火与德国Bf109像素飞机预览"></canvas><span class="version-tag">COMBAT · V0.1</span><div class="art-label">CHANNEL 1940</div></div><div class="version-body"><div class="version-title"><h3>1940 · 海峡空战</h3><span class="quiet-tag warm">单人对 AI</span></div><p>加入英国或德国空军，驾驶螺旋桨战机迎击对手。在自己的机库里，选一身专属涂装。</p><div class="version-footer"><span>2 款战机 · 8 款涂装</span><a class="button button-gold" href="#hangar">进入机库 <span aria-hidden="true">↗</span></a></div></div></article>
+        </div>
+      </section>
+      <footer class="site-footer"><span>AIRPLANES <span class="muted">/ 飞行档案</span></span><span>原版灵感与渲染来源 <a href="https://x.com/creativedash/status/2122000830895386680" target="_blank" rel="noreferrer">Dash / Fly ↗</a></span><button data-action="credits">制作与来源</button></footer>
+    </section>
+
+    <section id="hangar-screen" class="screen hangar-screen" aria-label="空战机库" hidden>
+      <header class="masthead"><a class="brand" href="#home"><img src="./assets/favicon.svg" width="34" height="34" alt=""><span>AIRPLANES</span></a><a class="back-link" href="#home">← 返回版本入口</a><span class="build-label">CHANNEL <b>1940</b></span></header>
+      <div class="hangar-heading"><div class="eyebrow">PREPARE FOR TAKEOFF</div><h1>你的战机。你的航线。</h1><p>选择阵营与涂装，准备进入海峡上空。</p></div>
+      <div class="hangar-layout">
+        <section class="aircraft-display" aria-label="已选飞机"><div class="faction-tabs" role="group" aria-label="选择阵营"><button data-faction="raf" aria-pressed="true"><span class="roundel" aria-hidden="true"></span>英国空军 <small>RAF</small></button><button data-faction="luftwaffe" aria-pressed="false"><span class="cross-mark" aria-hidden="true">✚</span>德国空军 <small>LUFTWAFFE</small></button></div><div class="aircraft-stage"><div class="stage-ring ring-one"></div><div class="stage-ring ring-two"></div><div class="stage-axis"></div><canvas id="hangar-preview" width="800" height="520" aria-label="已选飞机的像素立体预览"></canvas><span class="stage-caption">SPRITE STACK / AIRFRAME STUDY</span><span class="aircraft-number" id="aircraft-number">01</span></div><div class="aircraft-caption"><div><div class="eyebrow" id="aircraft-subtitle">SUPERMARINE</div><h2 id="aircraft-name">Spitfire · 喷火</h2></div><button class="icon-button" id="rotate-preview" aria-label="旋转飞机预览">↻</button></div><p class="aircraft-description" id="aircraft-description"></p></section>
+        <section class="flight-setup" aria-label="飞行配置"><div class="setup-block"><div class="setup-heading"><h3>01 / 选择涂装</h3><span id="skin-count">4 LIVERIES</span></div><div id="skin-options" class="skin-options"></div><p class="skin-description" id="skin-description"></p></div><div class="setup-block"><div class="setup-heading"><h3>02 / 飞行任务</h3><span>SORTIE</span></div><div id="mission-options" class="mission-options"></div></div><div class="setup-block compact-block"><div class="setup-heading"><h3>03 / 难度</h3></div><div class="difficulty-options" role="group" aria-label="选择难度"><button data-difficulty="rookie" aria-pressed="true">初次出击 <small>较宽容的战斗节奏</small></button><button data-difficulty="ace" aria-pressed="false">王牌飞行员 <small>更积极的敌方 AI</small></button></div></div><button class="button button-gold takeoff-button" id="start-combat">开始出击 <span aria-hidden="true">↗</span></button><p class="setup-note">单人对 AI · 自动保存涂装与最佳成绩<br>机型与涂装为历史风格演绎，飞行性能采用街机设定。</p></section>
+      </div>
+    </section>
+
+    <section id="game-screen" class="screen game-screen" aria-label="飞行游戏" hidden>
+      <canvas id="game-canvas" aria-label="游戏画面"></canvas><canvas id="flame-canvas" aria-hidden="true"></canvas><canvas id="effects-canvas" aria-hidden="true"></canvas>
+      <div class="game-topbar"><button class="hud-button" id="game-exit" aria-label="暂停并返回菜单">← 菜单</button><div class="flight-mode-label"><b id="mode-title">净空体验</b><span id="mode-subtitle">CLEAR SKIES</span></div><div class="game-top-actions"><button class="hud-button" id="sound-toggle" aria-pressed="false">声音关</button><button class="hud-button" id="game-pause" aria-label="暂停游戏">Ⅱ</button></div></div>
+      <div id="combat-hud" class="combat-hud" hidden><div class="status-strip"><div class="hud-stat"><span>机体</span><b id="health-label">100</b><div class="meter"><i id="health-fill"></i></div></div><div class="hud-stat"><span>机枪温度</span><b id="heat-label">0%</b><div class="meter heat-meter"><i id="heat-fill"></i></div></div><div class="hud-stat numeric"><span>击落</span><b id="kills-label">00</b></div><div class="hud-stat numeric"><span>得分</span><b id="score-label">0000</b></div></div><div class="mission-hud"><b id="mission-hud-title">海峡巡逻</b><span id="mission-progress">第 1 / 3 波</span><span id="mission-timer">00:00</span></div><canvas id="radar-canvas" width="132" height="132" aria-label="雷达：中心为你的位置，红点为敌机"></canvas><div class="combat-message" id="combat-message" role="status"></div></div>
+      <div id="free-toolbar" class="free-toolbar"><button class="hud-button" id="change-view">视角：俯视</button><button class="hud-button" id="change-time">时段：白昼</button><button class="hud-button" id="change-free-skin">涂装：原版</button></div>
+      <div class="flight-instruments"><span><b id="speed-label">92</b> 航速</span><span><b id="altitude-label">110</b> 高度</span><span id="fps-label" class="fps-label"></span></div>
+      <div id="desktop-hint" class="desktop-hint">WASD / 方向键操控 · Shift 加速 · P 暂停</div>
+      <div class="touch-controls" id="touch-controls"><div class="joystick" id="joystick" role="group" aria-label="触摸摇杆：左右转向，上下升降"><div class="joystick-cross"></div><div class="joystick-thumb" id="joystick-thumb"></div><span>操控</span></div><div class="touch-actions"><button id="touch-boost" class="touch-button boost-button" aria-label="按住加速">加速</button><button id="touch-fire" class="touch-button fire-button" aria-label="按住射击">射击</button><button id="touch-roll" class="touch-button" aria-label="翻滚">翻滚</button></div></div>
+      <div id="loading-panel" class="loading-panel" role="status"><div class="loading-line"></div><b>正在准备航线</b><span>生成海岸、云层与飞行世界…</span></div>
+      <div id="pause-panel" class="game-modal" hidden><div class="modal-card"><div class="eyebrow">FLIGHT PAUSED</div><h2>稍作停留。</h2><p>你的航线会在这里等你。</p><button class="button button-gold" id="resume-game">继续飞行</button><button class="button button-outline" id="restart-game">重新出发</button><button class="text-button" id="leave-game">返回版本入口</button></div></div>
+      <div id="result-panel" class="game-modal" hidden><div class="modal-card result-card"><div class="eyebrow" id="result-eyebrow">SORTIE COMPLETE</div><h2 id="result-title">任务完成</h2><p id="result-description"></p><div class="result-stats"><div><span>得分</span><b id="result-score">0</b></div><div><span>击落</span><b id="result-kills">0</b></div><div><span>命中率</span><b id="result-accuracy">0%</b></div></div><p id="result-best" class="result-best"></p><button class="button button-gold" id="play-again">再次出击</button><button class="button button-outline" id="back-hangar">返回机库</button></div></div>
+    </section>
+    <dialog id="info-dialog"><button class="dialog-close icon-button" aria-label="关闭">×</button><div id="info-content"></div></dialog>
+    <div id="error-banner" class="error-banner" role="alert" hidden></div>
+  </main>
+  <noscript>请启用 JavaScript 运行 Airplanes。游戏在浏览器本地计算，无需注册。</noscript>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>

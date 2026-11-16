@@ -1,0 +1,17 @@
+{
+  "name": "airplanes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Clear skies and a playable 1940 RAF / Luftwaffe pixel-flight game.",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "start": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.js",
+    "check": "node scripts/check.mjs",
+    "test:browser": "node tests/browser-smoke.mjs"
+  },
+  "engines": { "node": ">=22" },
+  "devDependencies": { "playwright": "1.62.1" }
+}

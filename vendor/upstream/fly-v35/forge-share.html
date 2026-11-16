@@ -1,0 +1,130 @@
+<!doctype html>
+<!-- data-appearance="dim": the dashboard is the app's DIM palette by design
+     (its #2b2b2b rail IS dim's ink-1f), so the @forge/ui theme tokens the
+     ported app components read (workspace switcher popup, plan chips,
+     upgrade panel) must resolve at the dim rung — the bare :root defaults
+     are the DARK ramp, which rendered the picker popup darker than the rail
+     instead of lifted off it. -->
+<html lang="en" style="background: #141414" data-appearance="dim">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>fighter · Forge</title>
+    <meta name="description" content="Pixel-art fighter jet built by sprite stacking, over stacked islands. Space cycles overhead, chase and cockpit views; click rolls, hold fires the thrusters; fly from the wavetops to high altitude." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Forge" />
+    <meta property="og:url" content="https://forge.ui8.ai/share/frag_1eb8944c-57b1-42ca-a909-5c2d7e517c24" />
+    <meta property="og:title" content="fighter · Forge" />
+    <meta property="og:description" content="Pixel-art fighter jet built by sprite stacking, over stacked islands. Space cycles overhead, chase and cockpit views; click rolls, hold fires the thrusters; fly from the wavetops to high altitude." />
+    <meta property="og:image" content="https://forge.ui8.ai/api/v1/fragments/frag_1eb8944c-57b1-42ca-a909-5c2d7e517c24/share/preview-image?v=39" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="800" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:alt" content="fighter · Forge" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="fighter · Forge" />
+    <meta name="twitter:description" content="Pixel-art fighter jet built by sprite stacking, over stacked islands. Space cycles overhead, chase and cockpit views; click rolls, hold fires the thrusters; fly from the wavetops to high altitude." />
+    <meta name="twitter:image" content="https://forge.ui8.ai/api/v1/fragments/frag_1eb8944c-57b1-42ca-a909-5c2d7e517c24/share/preview-image?v=39" />
+    <meta name="twitter:image:alt" content="fighter · Forge" />
+
+    <!-- Shared Forge brand identity — same favicon + social card as the
+         ui8.ai/forge landing (assets copied into public/; the card is
+         landing v3's, 13 Oct: keep its text and image in step with
+         apps/site/src/features/site-meta.ts). -->
+    <link rel="icon" href="/favicon.svg?v=6" type="image/svg+xml" />
+    <link
+      rel="icon"
+      href="/favicon-32.png?v=6"
+      type="image/png"
+      sizes="32x32"
+    />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=6" />
+
+    <!-- Open Graph (Slack, iMessage, LinkedIn, Discord, Facebook) -->
+
+    <!-- Twitter / X — summary_large_image renders the full-width card -->
+
+    <style>
+      /* Boot cover. Stays plain dark while the JS downloads (short); the
+         moment the module graph is ready, main.tsx mounts the REAL MiniLoader
+         into it — the genuine component, not a CSS imitation — which then
+         plays through the whole data-loading phase and fades out after the
+         app's first paint. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #141414;
+        z-index: 99;
+        transition: opacity 0.25s ease;
+        pointer-events: none;
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-rM3D8Mce.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/jsx-runtime-DBS2Xqfh.js">
+    <link rel="modulepreload" crossorigin href="/assets/preload-helper-TKOBYGYD.js">
+    <link rel="modulepreload" crossorigin href="/assets/react-C8pPMXcI.js">
+    <link rel="modulepreload" crossorigin href="/assets/link-CAgvr0iA.js">
+    <link rel="modulepreload" crossorigin href="/assets/with-selector-BaaJxFUF.js">
+    <link rel="modulepreload" crossorigin href="/assets/route-DDLjr7oj.js">
+    <link rel="modulepreload" crossorigin href="/assets/lazyRouteComponent-Bs5WKJbw.js">
+    <link rel="modulepreload" crossorigin href="/assets/welcome-DwgG_tXU.js">
+    <link rel="modulepreload" crossorigin href="/assets/shell-search-DVKECGdc.js">
+    <link rel="modulepreload" crossorigin href="/assets/conic-spin-lkSN84Yc.js">
+    <link rel="modulepreload" crossorigin href="/assets/plus-badge-sweep-K6VZVpbu.js">
+    <link rel="modulepreload" crossorigin href="/assets/maintenance-CZNtKjl_.js">
+    <link rel="modulepreload" crossorigin href="/assets/schemas-DJQFDvej.js">
+    <link rel="modulepreload" crossorigin href="/assets/projects-BB1q7V2G.js">
+    <link rel="modulepreload" crossorigin href="/assets/client-DdlPOoLk.js">
+    <link rel="modulepreload" crossorigin href="/assets/useMutation-C04xAx7C.js">
+    <link rel="modulepreload" crossorigin href="/assets/deploy-api-Cw8Y4tCn.js">
+    <link rel="modulepreload" crossorigin href="/assets/queries-B6qKiQCm.js">
+    <link rel="modulepreload" crossorigin href="/assets/app-context-BQjsDN6P.js">
+    <link rel="modulepreload" crossorigin href="/assets/notification-bus-CdFpIsPZ.js">
+    <link rel="modulepreload" crossorigin href="/assets/mutations-BUDcBHtm.js">
+    <link rel="modulepreload" crossorigin href="/assets/useQuery-CC4aFNW6.js">
+    <link rel="modulepreload" crossorigin href="/assets/orgs-DHSYj96-.js">
+    <link rel="modulepreload" crossorigin href="/assets/authz-ES24qplm.js">
+    <link rel="modulepreload" crossorigin href="/assets/org-route-Be_E6iso.js">
+    <link rel="modulepreload" crossorigin href="/assets/Match-okja8HgB.js">
+    <link rel="modulepreload" crossorigin href="/assets/react-DNKodKzD.js">
+    <link rel="modulepreload" crossorigin href="/assets/UpgradePanel-CaYBjD8X.js">
+    <link rel="modulepreload" crossorigin href="/assets/card-So90-co3.js">
+    <link rel="modulepreload" crossorigin href="/assets/ErrorState-CXM69D7x.js">
+    <link rel="modulepreload" crossorigin href="/assets/panel-active-CCE48XHF.js">
+    <link rel="modulepreload" crossorigin href="/assets/walker-canvas-DjOUQoU6.js">
+    <link rel="modulepreload" crossorigin href="/assets/PagePending-DkPm8JAH.js">
+    <link rel="modulepreload" crossorigin href="/assets/chunk-BO2N2NFS-DyzESFws.js">
+    <link rel="modulepreload" crossorigin href="/assets/createLucideIcon-CU7mEaKf.js">
+    <link rel="modulepreload" crossorigin href="/assets/button-Cb7TYr6N.js">
+    <link rel="modulepreload" crossorigin href="/assets/src-DO0CV2iW.js">
+    <link rel="modulepreload" crossorigin href="/assets/forge-BUdVsLc_.js">
+    <link rel="modulepreload" crossorigin href="/assets/projects-ByEUGV7m.js">
+    <link rel="modulepreload" crossorigin href="/assets/collections-2XoKnf4-.js">
+    <link rel="modulepreload" crossorigin href="/assets/dashboard-entry-BXHiIzTZ.js">
+    <link rel="modulepreload" crossorigin href="/assets/login-CdhmrEjG.js">
+    <link rel="modulepreload" crossorigin href="/assets/boot-splash-D1F4tD0e.js">
+    <link rel="modulepreload" crossorigin href="/assets/breakpoints-CWswdgpG.js">
+    <link rel="modulepreload" crossorigin href="/assets/bridge-DJqrGjh7.js">
+    <link rel="modulepreload" crossorigin href="/assets/device-Cu-_Em6v.js">
+    <link rel="modulepreload" crossorigin href="/assets/_authed-BzaxNpGD.js">
+    <link rel="modulepreload" crossorigin href="/assets/invite._invitationId-DCLkfXlk.js">
+    <link rel="modulepreload" crossorigin href="/assets/mcp.consent-BMnrw0Ur.js">
+    <link rel="modulepreload" crossorigin href="/assets/skills-CH57g-ZF.js">
+    <link rel="modulepreload" crossorigin href="/assets/projects._collectionId-hieOSvTw.js">
+    <link rel="modulepreload" crossorigin href="/assets/projects.index-Dyd2Ft5o.js">
+    <link rel="modulepreload" crossorigin href="/assets/projects._projectId-DIuhpJgO.js">
+    <link rel="modulepreload" crossorigin href="/assets/embed.fragments._fragmentId-CfaBTXov.js">
+    <link rel="modulepreload" crossorigin href="/assets/temporal-design-Cd10vDLc.js">
+    <link rel="modulepreload" crossorigin href="/assets/temporal-design_._board-BJXqoSsk.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-CFKenB9u.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="splash" aria-hidden="true"></div>
+  <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"0e30ac632b8149e0bcb9737d69644ba2","r":1,"spa":2}' crossorigin="anonymous"></script>
+</body>
+</html>

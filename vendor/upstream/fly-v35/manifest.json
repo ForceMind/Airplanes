@@ -1,0 +1,57 @@
+{
+  "upstream": "Fly / fighter by Dash (@creativedash)",
+  "revision": 35,
+  "retrievedOn": "2026-11-16",
+  "post": "https://x.com/creativedash/status/2122000830895386680",
+  "share": "https://forge.ui8.ai/share/frag_1eb8944c-57b1-42ca-a909-5c2d7e517c24",
+  "files": [
+    {
+      "file": "main.tsx",
+      "url": "https://fly.ui8.dev/src/main.tsx",
+      "bytes": 4891,
+      "sha256": "0047b6996ab329f8b51d7a71461dbf87b6c001490f4a57056229ef60774c3ecb"
+    },
+    {
+      "file": "fighter-jet-scene.tsx",
+      "url": "https://fly.ui8.dev/src/components/fighter-jet-scene.tsx?v=b2de1f6eed858970a6649399450fbe63b507152e229cce0b20b7ea1b8d146c18",
+      "bytes": 15633,
+      "sha256": "6807f8fff7af9afc6be33eccbbe96b1bee63b8b27b6d731a574db60666128449"
+    },
+    {
+      "file": "scene.ts",
+      "url": "https://fly.ui8.dev/src/lib/scene.ts?v=5df1766eec48759fc778ea470305cd02274d8dfb749dcea9c7eb919af44b761d",
+      "bytes": 81297,
+      "sha256": "0114680e71c1985d9eb83e55b3d751a98f05d18272b31f0921342be756f50824"
+    },
+    {
+      "file": "jet-model.ts",
+      "url": "https://fly.ui8.dev/src/lib/jet-model.ts?v=a0cd024d6694faa1ab4403b2613f0df65f542270954fd119f6b4d611908f7b73",
+      "bytes": 7945,
+      "sha256": "410c9cb213f815e916ea79fe6ee6a0cd323e2775cb0046cad1e0dd0751438c63"
+    },
+    {
+      "file": "cockpit.ts",
+      "url": "https://fly.ui8.dev/src/lib/cockpit.ts?v=17e4b30d9971e952b5018446481c3e668842856126324f91b84ff48eae1c5795",
+      "bytes": 48934,
+      "sha256": "37275c868efdd1f280437e8f79847c6ed90c035860c7897003c5d79da0cf1544"
+    },
+    {
+      "file": "flame-layer.ts",
+      "url": "https://fly.ui8.dev/src/lib/flame-layer.ts?v=fed7971be4bec7b2677fac9c8362659f1c71e5b8c1db92782292551234bb28bc",
+      "bytes": 9370,
+      "sha256": "7435b7e4234e48877f5725d99da4335243b3ebc0272e6e212f9d0170d88bac1b"
+    },
+    {
+      "file": "fly.html",
+      "url": "https://fly.ui8.dev",
+      "bytes": 1062,
+      "sha256": "d9de2f6d73cc0fe28aaf5d2b9f76a39d59ad581a1bae8267d3fbad8bccada191"
+    },
+    {
+      "file": "forge-share.html",
+      "url": "https://forge.ui8.ai/share/frag_1eb8944c-57b1-42ca-a909-5c2d7e517c24",
+      "bytes": 8914,
+      "sha256": "e5532a408a2fee925ca2dfee7c22c497d2a24e58f5c7c6500bc78023ed5f4e5d"
+    }
+  ]
+}
