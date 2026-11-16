@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCombat, MISSIONS, DIFFICULTIES, shortestOffset } from '../src/game/combat.js';
 import { createScene, DEFAULT_PARAMS } from '../src/engine/scene.js';
+import { getAircraftSpec } from '../src/game/aircraft-specs.js';
+import { actorPointToWorld } from '../src/engine/actor-renderer.js';
 
 const startPose = () => ({ x: 1000, y: 1000, z: 110, yaw: 0, pitch: 0, roll: 0, speed: 92 });
 
@@ -31,10 +33,10 @@ test('all mission and difficulty choices are real configurations', () => {
   assert.equal(MISSIONS.channel.targetKills, 6);
   assert.equal(MISSIONS.intercept.waves.reduce((a, b) => a + b, 0), 8);
   assert.equal(MISSIONS.survival.duration, 180);
-  assert.ok(DIFFICULTIES.ace.damage > DIFFICULTIES.rookie.damage);
+  assert.ok(DIFFICULTIES.ace.damageScale > DIFFICULTIES.rookie.damageScale);
 });
 
-test('first contact is ahead, near the player, deterministic, and the opposing faction', () => {
+test('first contact starts ahead beyond the default viewport, deterministically as the opposing faction', () => {
   const pose = startPose();
   const a = createCombat({ faction: 'raf', seed: 11 });
   const b = createCombat({ faction: 'raf', seed: 11 });
@@ -44,11 +46,14 @@ test('first contact is ahead, near the player, deterministic, and the opposing f
   assert.equal(a.state.enemies.length, 2);
   for (const enemy of a.state.enemies) {
     const distance = Math.hypot(enemy.x - pose.x, enemy.y - pose.y);
-    assert.ok(distance >= 80 && distance <= 125);
+    assert.ok(distance >= 450 && distance <= 650);
     assert.ok(enemy.y < pose.y);
     assert.ok(Math.abs(enemy.z - pose.z) < 12);
     assert.equal(enemy.faction, 'luftwaffe');
     assert.equal(enemy.modelId, 'bf109');
+    assert.equal(enemy.aiMode, 'ingress');
+    assert.equal(enemy.enteredAt, null);
+    assert.ok(170 + enemy.y - pose.y + enemy.viewRadius < 0, 'whole aircraft is outside the view');
   }
   const german = createCombat({ faction: 'luftwaffe' });
   german.initialize(pose);
@@ -56,7 +61,7 @@ test('first contact is ahead, near the player, deterministic, and the opposing f
   assert.equal(german.state.enemies[0].faction, 'raf');
 });
 
-test('initial enemies enter the real overhead viewport within two seconds on desktop and mobile', () => {
+test('enemies are born fully offscreen and fly continuously through an edge in the real desktop and mobile cameras', () => {
   const params = {
     ...DEFAULT_PARAMS, speed: 92, boost: 1.45, agility: 1.55, altitude: 95,
     ceiling: 180, clearance: 7, bank: 40, spread: 1, jetScale: 0.8,
@@ -64,24 +69,73 @@ test('initial enemies enter the real overhead viewport within two seconds on des
     afterburner: 0, flameStyle: 'pixel', trails: false, wingmen: 0,
     shadow: true, followPointer: false, invertY: false, stunts: false, intro: false,
   };
-  for (const [width, height] of [[520, 340], [360, 200], [180, 320]]) {
+  for (const [width, height, faction, dt] of [
+    [340, 233, 'raf', 1 / 60], [340, 233, 'luftwaffe', 0.05],
+    [520, 340, 'raf', 1 / 60], [360, 200, 'raf', 1 / 60], [180, 320, 'luftwaffe', 1 / 60],
+  ]) {
     const scene = createScene(params, { hidePlayer: true, manualControl: true });
     scene.resize(width, height);
-    const combat = createCombat({ seed: 7 });
-    combat.initialize(scene.getFlightState());
-    for (let frame = 0; frame < 120; frame += 1) {
-      scene.setKeys(0, 0, false);
-      scene.step(1 / 60);
-      combat.step(1 / 60, scene.getFlightState());
-    }
+    // Match app initialization exactly: no flight or camera prewarming step.
     scene.render();
+    const combat = createCombat({ seed: 7, faction,
+      getView: () => ({ width: scene.width, height: scene.height, project: scene.projectPoint }),
+    });
+    combat.initialize(scene.getFlightState());
+    const appeared = new Set();
+    let previous = new Map();
     for (const enemy of combat.state.enemies) {
-      const point = scene.projectPoint(enemy.x, enemy.y, enemy.z);
-      assert.ok(point.visible && point.x > 15 && point.x < width - 15 && point.y > 15 && point.y < height - 15,
-        JSON.stringify({ width, height, point }));
+      const p = scene.projectPoint(enemy.x, enemy.y, enemy.z), r = enemy.viewRadius * p.scale;
+      assert.ok(p.x + r < 0 || p.x - r >= width || p.y + r < 0 || p.y - r >= height,
+        `Born outside the viewport including geometry: ${JSON.stringify({ width, height, p, r })}`);
+      assert.deepEqual(enemy.spawnProjection, {
+        x: p.x, y: p.y, scale: p.scale, width, height, radius: enemy.viewRadius,
+      });
+      previous.set(enemy.id, { x: enemy.x, y: enemy.y, z: enemy.z, speed: enemy.speed });
     }
+    for (let frame = 0; frame < Math.ceil(3 / dt); frame += 1) {
+      scene.setKeys(0, 0, false);
+      scene.step(dt);
+      scene.render();
+      combat.step(dt, scene.getFlightState());
+      for (const enemy of combat.state.enemies) {
+        const last = previous.get(enemy.id);
+        const moved = Math.hypot(shortestOffset(enemy.x - last.x), shortestOffset(enemy.y - last.y), enemy.z - last.z);
+        // A frame may end just after ingress decelerates to attack speed.
+        const frameSpeed = Math.max(last.speed, enemy.speed);
+        assert.ok(moved <= Math.hypot(frameSpeed, 26) * dt + 0.1, `Ingress never teleports: ${moved}`);
+        const p = scene.projectPoint(enemy.x, enemy.y, enemy.z);
+        const r = enemy.viewRadius * p.scale;
+        if (combat.state.elapsed < 1) {
+          assert.ok(p.x + r < 0 || p.x - r >= width || p.y + r < 0 || p.y - r >= height,
+            `The whole plane remains offscreen during the first second, including the first app frame: ${JSON.stringify({ width, height, faction, time: combat.state.elapsed, p, r })}`);
+          assert.equal(enemy.enteredAt, null);
+        }
+        if (p.visible && !appeared.has(enemy.id)) {
+          assert.ok(combat.state.elapsed >= 1, 'Radar warning precedes visible entry by at least one second');
+          const edgeDistance = Math.min(p.x, p.y, width - p.x, height - p.y);
+          assert.ok(edgeDistance < 16, `First visible centre crosses a screen edge: ${JSON.stringify(p)}`);
+          appeared.add(enemy.id);
+        }
+        previous.set(enemy.id, { x: enemy.x, y: enemy.y, z: enemy.z, speed: enemy.speed });
+      }
+    }
+    assert.equal(appeared.size, 2, 'Both real aircraft enter within three seconds');
     assert.equal(combat.state.player.health, 100);
     assert.equal(combat.state.projectiles.length, 0);
+    // A later wave uses the new viewport and player position instead of cached
+    // dimensions or the initial heading.
+    clearWave(combat, scene.getFlightState());
+    scene.resize(height, width);
+    for (let frame = 0; frame < 210 && combat.state.wave === 1; frame++) {
+      scene.setKeys(0.25, 0, false); scene.step(1 / 60); scene.render();
+      combat.step(1 / 60, scene.getFlightState());
+    }
+    assert.equal(combat.state.wave, 2);
+    for (const enemy of combat.state.enemies) {
+      const p = scene.projectPoint(enemy.x, enemy.y, enemy.z), r = enemy.viewRadius * p.scale;
+      assert.ok(p.x + r < 0 || p.x - r >= scene.width || p.y + r < 0 || p.y - r >= scene.height,
+        'Reinforcements also begin completely outside the resized, moving camera');
+    }
   }
 });
 
@@ -101,6 +155,70 @@ test('the player gun overheats, stops spending shots, cools, and fires again', (
   assert.ok(combat.state.player.shots > shots);
 });
 
+test('each aircraft fires its complete real armament from the same rolled and pitched gun ports as the model', () => {
+  const pose = { ...startPose(), yaw: 0.65, pitch: 0.18, roll: -0.4 };
+  for (const faction of ['raf', 'luftwaffe']) {
+    const spec = getAircraftSpec(faction === 'raf' ? 'spitfire' : 'bf109');
+    const combat = createCombat({ faction });
+    combat.initialize(pose);
+    combat.state.enemies = [];
+    for (let i = 0; i < 4; i++) combat.step(1 / 120, pose, { firing: true });
+    const shots = combat.state.projectiles;
+    assert.equal(shots.length, faction === 'raf' ? 8 : 4);
+    assert.equal(new Set(shots.map(s => s.mountId)).size, spec.gunMounts.length);
+    for (const shot of shots) {
+      const mount = spec.gunMounts.find(m => m.id === shot.mountId);
+      const origin = actorPointToWorld(pose, mount, spec.modelScale);
+      assert.ok(Math.hypot(shot.originX - origin.x, shot.originY - origin.y, shot.originZ - origin.z) < 1e-9);
+      assert.equal(shot.tracer, true, 'The first round at every gun port is visible');
+      assert.equal(shot.kind, mount.kind);
+      assert.equal(shot.calibreMm, mount.calibreMm);
+    }
+    assert.equal(shots.filter(s => s.kind === 'cannon').length, faction === 'raf' ? 0 : 2);
+    assert.ok(combat.state.effects.some(e => e.type === 'muzzle' && e.mountId));
+  }
+});
+
+test('independent barrel cadence produces periodic tracers and the 109 cannons fire more slowly than its nose guns', () => {
+  const pose = startPose();
+  for (const faction of ['raf', 'luftwaffe']) {
+    const spec = getAircraftSpec(faction === 'raf' ? 'spitfire' : 'bf109');
+    const combat = createCombat({ faction });
+    combat.initialize(pose); combat.state.enemies = [];
+    tick(combat, 1, pose, { firing: true });
+    const shots = combat.state.projectiles;
+    assert.equal(shots.length, combat.state.player.shots, 'Non-tracers stay in the physical simulation');
+    assert.ok(shots.some(s => !s.tracer) && shots.some(s => s.tracer));
+    assert.ok(shots.filter(s => s.tracer).length < shots.length / 2, 'A stream is not a solid laser line');
+    for (const mount of spec.gunMounts) {
+      const count = shots.filter(s => s.mountId === mount.id).length;
+      assert.ok(Math.abs(count - mount.roundsPerMinute / 60) <= 1, `${mount.id}: ${count} rounds in one second`);
+    }
+    if (faction === 'luftwaffe') {
+      assert.ok(combat.state.player.machineGunShots > combat.state.player.cannonShots * 1.6);
+      const gun = shots.find(s => s.kind === 'machine-gun'), cannon = shots.find(s => s.kind === 'cannon');
+      assert.ok(Math.hypot(gun.vx, gun.vy, gun.vz) > Math.hypot(cannon.vx, cannon.vy, cannon.vz));
+      assert.ok(cannon.damage > gun.damage);
+    }
+  }
+});
+
+test('AI uses the opposing aircraft gun ports and mixed armament in short bursts', () => {
+  const pose = startPose();
+  for (const faction of ['raf', 'luftwaffe']) {
+    const combat = createCombat({ faction }); combat.initialize(pose);
+    const enemy = combat.state.enemies[0];
+    Object.assign(enemy, { x: pose.x, y: pose.y + 350, z: pose.z, yaw: 0,
+      enteredAt: 0, entryUntil: 0, age: 7, nextDecision: 100, fireCooldown: 0 });
+    combat.state.enemies = [enemy]; combat.state.elapsed = 7;
+    combat.step(0.05, pose);
+    const spec = getAircraftSpec(enemy.modelId);
+    const shots = combat.state.projectiles.filter(s => s.owner === enemy.id);
+    assert.deepEqual(new Set(shots.map(s => s.mountId)), new Set(spec.gunMounts.map(m => m.id)));
+    assert.ok(enemy.burstUntil < combat.state.elapsed + 0.6, 'AI fires bounded bursts rather than permanently holding the trigger');
+  }
+});
+
 test('a fast bullet hits the traversed target instead of tunneling through', () => {
   const combat = createCombat();
   const pose = startPose();
@@ -108,7 +226,7 @@ test('a fast bullet hits the traversed target instead of tunneling through', () 
   const target = combat.state.enemies[0];
   Object.assign(target, { x: 1000, y: 800, z: 110, health: 12, speed: 0, baseSpeed: 0 });
   combat.state.enemies = [target];
-  combat.state.projectiles.push(makeShot({ x: 920, y: 800, vx: 3200 }));
+  combat.state.projectiles.push(makeShot({ x: 920, y: 800, vx: 3200, tracer: false }));
   combat.step(0.05, pose);
   assert.equal(combat.state.player.kills, 1);
   assert.equal(combat.state.player.hits, 1);
@@ -246,26 +364,28 @@ test('invalid timing cannot create negative time or non-finite state', () => {
   for (const enemy of combat.state.enemies) assert.ok(Number.isFinite(enemy.x + enemy.y + enemy.z));
 });
 
-test('a bounded-turn pilot can complete a rookie patrol using the actual guns and collisions', () => {
-  const combat = createCombat({ difficulty: 'rookie', seed: 7 });
-  const pose = startPose();
-  combat.initialize(pose);
-  const dt = 1 / 60;
-  for (let i = 0; i < 120 * 60 && combat.state.status === 'playing'; i += 1) {
-    const target = combat.state.enemies[0];
-    if (target) {
-      const desired = Math.atan2(shortestOffset(target.x - pose.x), -shortestOffset(target.y - pose.y));
-      const angle = Math.atan2(Math.sin(desired - pose.yaw), Math.cos(desired - pose.yaw));
-      pose.yaw += Math.max(-1.25 * dt, Math.min(1.25 * dt, angle));
+test('a bounded-turn pilot in either aircraft can complete a rookie patrol using actual guns and collisions', () => {
+  for (const faction of ['raf', 'luftwaffe']) {
+    const combat = createCombat({ faction, difficulty: 'rookie', seed: 7 });
+    const pose = startPose();
+    combat.initialize(pose);
+    const dt = 1 / 60;
+    for (let i = 0; i < 120 * 60 && combat.state.status === 'playing'; i += 1) {
+      const target = combat.state.enemies[0];
+      if (target) {
+        const desired = Math.atan2(shortestOffset(target.x - pose.x), -shortestOffset(target.y - pose.y));
+        const angle = Math.atan2(Math.sin(desired - pose.yaw), Math.cos(desired - pose.yaw));
+        pose.yaw += Math.max(-1.25 * dt, Math.min(1.25 * dt, angle));
+      }
+      pose.x += Math.sin(pose.yaw) * pose.speed * dt;
+      pose.y -= Math.cos(pose.yaw) * pose.speed * dt;
+      combat.step(dt, pose, { firing: true });
     }
-    pose.x += Math.sin(pose.yaw) * pose.speed * dt;
-    pose.y -= Math.cos(pose.yaw) * pose.speed * dt;
-    combat.step(dt, pose, { firing: true });
+    assert.equal(combat.state.status, 'won', JSON.stringify({
+      faction, health: combat.state.player.health, kills: combat.state.player.kills, elapsed: combat.state.elapsed,
+    }));
+    assert.equal(combat.state.player.kills, 6);
+    assert.ok(combat.state.player.hits > 0);
+    assert.ok(combat.state.player.hits <= combat.state.player.shots);
   }
-  assert.equal(combat.state.status, 'won', JSON.stringify({
-    health: combat.state.player.health, kills: combat.state.player.kills, elapsed: combat.state.elapsed,
-  }));
-  assert.equal(combat.state.player.kills, 6);
-  assert.ok(combat.state.player.hits > 0);
-  assert.ok(combat.state.player.hits <= combat.state.player.shots);
 });

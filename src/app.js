@@ -1,6 +1,8 @@
 import { createScene, DEFAULT_PARAMS } from './engine/scene.js';
 import { createFlameLayer } from './engine/flame-layer.js';
+import { actorPointToWorld } from './engine/actor-renderer.js';
 import { AIRCRAFT, getAircraft, getSkin, createAircraftModel, drawAircraftPreview } from './game/aircraft.js';
+import { getAircraftSpec } from './game/aircraft-specs.js';
 import { createCombat, MISSIONS } from './game/combat.js';
 import { readSelection, saveSelection, saveRecord } from './game/preferences.js';
 import { createAudio } from './game/audio.js';
@@ -29,6 +31,7 @@ let image = null, flameLayer = null, params = null, lastFrame = 0, frameTime = 0
 let runToken = 0, previewAngle = -.5, playerModel = null, enemyModel = null, pointerPressed = false;
 let messageUntil = 0, fps = 0, heroScene = null, heroImage = null, heroFrame = 0, heroLast = 0;
 let freeSkinIndex = 0, lastShotCount = 0, oldKills = 0, previousHealth = 100;
+let hangarFrame = 0, hangarLast = 0, hangarTime = 0, showHardpoints = false;
 const held = new Set();
 const joystick = { pointer: null, x: 0, y: 0 };
 const touch = { fire: false, boost: false };
@@ -47,7 +50,11 @@ const sourceParams = {
   followPointer: true, invertY: true, stunts: true, intro: false,
 };
 
-Object.defineProperty(window, '__airplanesDebug', { get: () => ({ mode, paused, state: combat?.state || null, pose: scene?.getFlightState() || null, frames }) });
+Object.defineProperty(window, '__airplanesDebug', { get: () => ({
+  mode, paused, state: combat?.state || null, pose: scene?.getFlightState() || null, frames,
+  aircraftId: playerModel?.id || null, flameCount: scene?.flames.count || 0,
+  aircraftSpec: getAircraftSpec(selectedAircraft().id),
+}) });
 function reportError(error) {
   console.error(error);
   const banner = $('#error-banner');
@@ -65,11 +72,17 @@ function selectedMission() { return missionList().find(m => m.id === selection.m
 
 function updateHangar() {
   const aircraft = selectedAircraft();
+  const spec = getAircraftSpec(aircraft.id);
   const skin = getSkin(aircraft.id, selection.skins[selection.faction]);
   selection.skins[selection.faction] = skin.id;
   $('#aircraft-name').textContent = aircraft.name;
   $('#aircraft-subtitle').textContent = aircraft.subtitle;
   $('#aircraft-description').textContent = aircraft.description;
+  $('#aircraft-span').textContent = `${spec.dimensions.wingspanMetres.toFixed(2)} m`;
+  $('#aircraft-length').textContent = `${spec.dimensions.lengthMetres.toFixed(2)} m`;
+  $('#aircraft-propeller').textContent = `${spec.propeller.bladeCount} 叶变距桨`;
+  $('#aircraft-armament').textContent = spec.armamentLabel;
+  $('#hardpoint-legend').hidden = !showHardpoints;
   $('#aircraft-number').textContent = selection.faction === 'raf' ? '01' : '02';
   $('[data-faction="raf"]').setAttribute('aria-pressed', String(selection.faction === 'raf'));
   $('[data-faction="luftwaffe"]').setAttribute('aria-pressed', String(selection.faction === 'luftwaffe'));
@@ -94,12 +107,38 @@ function updateHangar() {
     button.append(copy, number); button.addEventListener('click', () => { selection.mission = item.id; persist(); updateHangar(); }); return button;
   }));
   $$('[data-difficulty]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.difficulty === selection.difficulty)));
-  const preview = $('#hangar-preview');
-  drawAircraftPreview(preview.getContext('2d'), createAircraftModel(aircraft.id, skin.id), { width: preview.width, height: preview.height, rotation: previewAngle });
+  drawHangarPreview();
+}
+function drawHangarPreview() {
+  const aircraft = selectedAircraft(), preview = $('#hangar-preview');
+  drawAircraftPreview(preview.getContext('2d'), createAircraftModel(aircraft.id, selection.skins[selection.faction]), {
+    width: preview.width, height: preview.height, rotation: previewAngle,
+    time: reducedMotion.matches ? 0 : hangarTime, showHardpoints,
+  });
+}
+function stopHangarPreview() { cancelAnimationFrame(hangarFrame); hangarFrame = 0; hangarLast = 0; }
+function startHangarPreview() {
+  stopHangarPreview(); drawHangarPreview();
+  if (reducedMotion.matches || document.hidden) return;
+  const draw = now => {
+    if (mode !== 'hangar' || document.hidden) { hangarFrame = 0; return; }
+    // A modest preview cadence is enough for propeller motion without running a full scene.
+    if (now - hangarLast >= 1000 / 24) {
+      hangarTime += hangarLast ? Math.min(.1, (now - hangarLast) / 1000) : 0;
+      hangarLast = now; drawHangarPreview();
+    }
+    hangarFrame = requestAnimationFrame(draw);
+  };
+  hangarFrame = requestAnimationFrame(draw);
 }
 $$('[data-faction]').forEach(button => button.addEventListener('click', () => { selection.faction = button.dataset.faction; persist(); updateHangar(); }));
 $$('[data-difficulty]').forEach(button => button.addEventListener('click', () => { selection.difficulty = button.dataset.difficulty; persist(); updateHangar(); }));
 $('#rotate-preview').addEventListener('click', () => { previewAngle += Math.PI / 4; updateHangar(); });
+$('#toggle-hardpoints').addEventListener('click', event => {
+  showHardpoints = !showHardpoints;
+  event.currentTarget.setAttribute('aria-pressed', String(showHardpoints));
+  event.currentTarget.textContent = showHardpoints ? '隐藏枪位' : '查看枪位'; updateHangar();
+});
 
 function drawBattleCard() {
   const card = $('#battle-preview'), ctx = card.getContext('2d');
@@ -142,8 +181,8 @@ function route() {
   stopGame(); mode = hash === 'hangar' ? 'hangar' : 'home';
   $('#home-screen').hidden = mode !== 'home'; $('#hangar-screen').hidden = mode !== 'hangar'; $('#game-screen').hidden = true;
   document.body.classList.remove('is-playing');
-  if (mode === 'hangar') { stopHero(); updateHangar(); window.scrollTo(0, 0); }
-  else { requestAnimationFrame(startHero); }
+  if (mode === 'hangar') { stopHero(); updateHangar(); startHangarPreview(); window.scrollTo(0, 0); }
+  else { stopHangarPreview(); requestAnimationFrame(startHero); }
 }
 window.addEventListener('hashchange', route);
 $('#start-free').addEventListener('click', () => { location.hash = 'free'; });
@@ -160,6 +199,8 @@ function clearInput() {
 function stopGame() {
   runToken++; cancelAnimationFrame(frameId); frameId = 0; clearInput();
   flameLayer?.dispose(); flameLayer = null; scene = null; combat = null; image = null;
+  fireCanvas.hidden = true;
+  effectsContext.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height);
   paused = false; audio.flight(0, false);
 }
 function resizeGame() {
@@ -177,13 +218,14 @@ function resizeGame() {
 new ResizeObserver(resizeGame).observe($('#game-screen'));
 
 async function startGame(nextMode) {
-  stopHero(); stopGame(); const token = ++runToken;
+  stopHero(); stopHangarPreview(); stopGame(); const token = ++runToken;
   mode = nextMode; paused = false; frames = 0; resultShown = false; freeSkinIndex = 0;
   $('#game-pause').textContent = 'Ⅱ'; $('#game-pause').setAttribute('aria-label', '暂停游戏');
   frameTime = 0; lastHUD = 0; oldKills = 0; previousHealth = 100; lastShotCount = 0;
   $('#home-screen').hidden = true; $('#hangar-screen').hidden = true; $('#game-screen').hidden = false;
   $('#loading-panel').hidden = false; $('#pause-panel').hidden = true; $('#result-panel').hidden = true;
   $('#combat-hud').hidden = mode !== 'combat'; $('#free-toolbar').hidden = mode !== 'free';
+  fireCanvas.hidden = mode !== 'free';
   $('#touch-fire').hidden = mode !== 'combat'; $('#touch-roll').hidden = mode !== 'free';
   $('#error-banner').hidden = true; document.body.classList.add('is-playing');
   $('#mode-title').textContent = mode === 'free' ? '净空体验' : '1940 · 海峡空战';
@@ -204,10 +246,16 @@ async function startGame(nextMode) {
     if (mode === 'combat') {
       playerModel = createAircraftModel(selectedAircraft().id, selection.skins[selection.faction]);
       enemyModel = createAircraftModel(selection.faction === 'raf' ? 'bf109' : 'spitfire', selection.faction === 'raf' ? 'luftwaffe-grey' : 'raf-classic');
-      combat = createCombat({ faction: selection.faction, difficulty: selection.difficulty, mission: selection.mission, seed: 7 });
+      // Build the current camera before choosing positions outside its viewport.
+      scene.render();
+      combat = createCombat({
+        faction: selection.faction, difficulty: selection.difficulty, mission: selection.mission, seed: 7,
+        getView: () => ({ width: scene.width, height: scene.height, project: (x, y, z) => scene.projectPoint(x, y, z) }),
+      });
       combat.initialize(scene.getFlightState());
       $('#mission-hud-title').textContent = selectedMission().name || selectedMission().title;
-      showMessage('保持航向 · 前方发现敌机', 4);
+      $('#weapon-hud').textContent = getAircraftSpec(playerModel.id).armamentLabel;
+      showMessage('雷达发现敌机 · 正在接近', 4);
     } else {
       try { flameLayer = createFlameLayer(fireCanvas); } catch { flameLayer = null; }
       if (!flameLayer) { params.flameStyle = 'pixel'; scene.setParams(params); }
@@ -219,7 +267,10 @@ async function startGame(nextMode) {
 
 function worldPoint(x, y, z, pose) { return { x: pose.x + wrappedDelta(x - pose.x), y: pose.y + wrappedDelta(y - pose.y), z }; }
 function projectWorld(x, y, z, pose) { const p = worldPoint(x, y, z, pose); return scene.projectPoint(p.x, p.y, p.z); }
-function actorFor(entity, model, pose, scale = .72) { return { ...entity, ...worldPoint(entity.x, entity.y, entity.z, pose), model, scale }; }
+function actorFor(entity, model, pose) {
+  return { ...entity, ...worldPoint(entity.x, entity.y, entity.z, pose), model,
+    scale: getAircraftSpec(model.id).modelScale, time: pose.time };
+}
 function frame(now) {
   frameId = 0;
   if (!scene || !['free', 'combat'].includes(mode)) return;
@@ -233,9 +284,9 @@ function frame(now) {
       scene.setKeys(turn, climb, held.has('ShiftLeft') || held.has('ShiftRight') || touch.boost);
       scene.step(dt);
       const pose = scene.getFlightState();
-      if (combat) combat.step(dt, pose, { firing: held.has('Space') || touch.fire || pointerPressed });
       const bytes = scene.render();
       if (combat) {
+        combat.step(dt, pose, { firing: held.has('Space') || touch.fire || pointerPressed });
         const actors = [actorFor(pose, playerModel, pose), ...combat.state.enemies.map(enemy => actorFor(enemy, enemyModel, pose))];
         scene.drawActors(actors);
       }
@@ -259,15 +310,33 @@ function drawCombatEffects(pose) {
   ctx.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height);
   ctx.save(); ctx.scale(sx, sy); ctx.lineCap = 'round';
   for (const bullet of combat.state.projectiles) {
+    if (!bullet.tracer) continue;
     const p = projectWorld(bullet.x, bullet.y, bullet.z, pose);
     if (!p.visible || !scene.isPointVisible(p.x, p.y, p.depth)) continue;
-    const trail = projectWorld(bullet.x - bullet.vx * .025, bullet.y - bullet.vy * .025, bullet.z - bullet.vz * .025, pose);
-    ctx.strokeStyle = bullet.owner === 'player' ? '#fff2bd' : '#ff956a'; ctx.lineWidth = bullet.owner === 'player' ? 1.05 : .8;
+    const cannon = bullet.kind === 'cannon', exposure = cannon ? .012 : .008;
+    const trail = projectWorld(bullet.x - bullet.vx * exposure, bullet.y - bullet.vy * exposure, bullet.z - bullet.vz * exposure, pose);
+    ctx.strokeStyle = cannon ? '#ffc07a' : '#fff0ba'; ctx.lineWidth = cannon ? 1.1 : .65;
     ctx.beginPath(); ctx.moveTo(trail.x, trail.y); ctx.lineTo(p.x, p.y); ctx.stroke();
   }
   for (const effect of combat.state.effects) {
-    const p = projectWorld(effect.x, effect.y, effect.z, pose); if (!p.visible) continue;
+    let point = effect;
+    if (effect.type === 'muzzle') {
+      const owner = effect.owner === 'player' ? pose : combat.state.enemies.find(enemy => enemy.id === effect.owner);
+      if (!owner) continue;
+      const spec = getAircraftSpec(effect.owner === 'player' ? playerModel.id : enemyModel.id);
+      const mount = spec.gunMounts.find(gun => gun.id === effect.mountId);
+      if (!mount) continue;
+      point = actorPointToWorld(owner, mount, spec.modelScale);
+    }
+    const p = projectWorld(point.x, point.y, point.z, pose);
+    if (!p.visible || !scene.isPointVisible(p.x, p.y, p.depth - .15)) continue;
     const t = clamp(effect.age / effect.life, 0, 1), explosion = effect.type === 'explosion';
+    if (effect.type === 'muzzle') {
+      const r = Math.max(.45, (effect.kind === 'cannon' ? 1.5 : .9) * p.scale);
+      ctx.globalAlpha = (1 - t) * .8; ctx.fillStyle = effect.kind === 'cannon' ? '#ffd09a' : '#fff1bf';
+      ctx.fillRect(p.x - r / 2, p.y - r / 2, r, r);
+      continue;
+    }
     const radius = Math.max(1, (effect.radius || 8) * p.scale * (explosion ? .5 + t * 1.7 : .4 + t));
     ctx.globalAlpha = 1 - t;
     ctx.fillStyle = t < .25 ? '#fff3bc' : t < .65 ? '#ef9956' : '#57545a';
@@ -286,16 +355,6 @@ function drawCombatEffects(pose) {
     ctx.strokeStyle = combat.state.player.overheated ? '#f9a481bb' : '#fff0c5aa'; ctx.lineWidth = .65;
     ctx.beginPath(); ctx.arc(aim.x, aim.y, 4.5, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(aim.x - 7, aim.y); ctx.lineTo(aim.x - 2, aim.y); ctx.moveTo(aim.x + 2, aim.y); ctx.lineTo(aim.x + 7, aim.y); ctx.moveTo(aim.x, aim.y - 7); ctx.lineTo(aim.x, aim.y - 2); ctx.stroke();
-  }
-  // A rapidly spinning propeller is a translucent disk perpendicular to the fuselage.
-  for (const actor of [actorFor(pose, playerModel, pose), ...combat.state.enemies.map(e => actorFor(e, enemyModel, pose))]) {
-    const prop = actor.model.propeller; if (!prop) continue;
-    const forward = prop.y * actor.scale;
-    const center = scene.projectPoint(actor.x + Math.sin(actor.yaw) * forward, actor.y - Math.cos(actor.yaw) * forward, actor.z + prop.z * actor.scale);
-    if (!center.visible || !scene.isPointVisible(center.x, center.y, center.depth)) continue;
-    ctx.globalAlpha = .24; ctx.strokeStyle = '#dce5d2'; ctx.lineWidth = 1.1;
-    const r = (prop.radius || 9) * actor.scale * center.scale;
-    ctx.beginPath(); ctx.ellipse(center.x, center.y, Math.max(.6, r), Math.max(.6, r * .25), -actor.yaw, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
   }
   ctx.restore();
   const hitAge = combat.state.elapsed - (combat.state.player.lastHitAt ?? -100);
@@ -319,10 +378,11 @@ function drawRadar(pose) {
 }
 function processEvents() {
   const state = combat.state;
+  if (state.events.some(event => event.type === 'wave') && state.wave > 1) showMessage('雷达发现增援 · 正从远处接近', 3.4);
   if (state.player.shots > lastShotCount) audio.effect('shot'); lastShotCount = state.player.shots;
   if (state.player.kills > oldKills) { audio.effect('explosion'); showMessage(`击落确认 +${state.player.kills - oldKills}`, 1.9); } oldKills = state.player.kills;
   if (state.player.health < previousHealth) audio.effect('hit'); previousHealth = state.player.health;
-  if (state.player.overheated) { $('#combat-message').textContent = '机枪过热 · 松开射击以冷却'; messageUntil = state.elapsed + .2; }
+  if (state.player.overheated) { $('#combat-message').textContent = '枪炮过热 · 松开射击以冷却'; messageUntil = state.elapsed + .2; }
   else if (state.elapsed > messageUntil) $('#combat-message').textContent = '';
 }
 function showMessage(text, seconds) { $('#combat-message').textContent = text; messageUntil = (combat?.state.elapsed || 0) + seconds; }
@@ -388,7 +448,11 @@ window.addEventListener('keydown', event => {
 });
 window.addEventListener('keyup', event => { held.delete(event.code); });
 window.addEventListener('blur', () => { clearInput(); if (scene) togglePause(true); });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { clearInput(); if (scene) togglePause(true); stopHero(); } else if (mode === 'home') startHero(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { clearInput(); if (scene) togglePause(true); stopHero(); stopHangarPreview(); }
+  else if (mode === 'home') startHero();
+  else if (mode === 'hangar') startHangarPreview();
+});
 canvas.addEventListener('pointermove', event => {
   if (!scene || paused || mode !== 'free' || event.pointerType === 'touch') return;
   const rect = canvas.getBoundingClientRect(); scene.pointerMove((event.clientX - rect.left) * canvas.width / rect.width, (event.clientY - rect.top) * canvas.height / rect.height);
@@ -421,8 +485,8 @@ $('#joystick').addEventListener('pointerdown', event => { if (paused || resultSh
 $('#joystick').addEventListener('pointermove', event => { if (joystick.pointer === event.pointerId) { updateJoystick(event); event.preventDefault(); } });
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) $('#joystick').addEventListener(type, event => { if (joystick.pointer !== event.pointerId) return; joystick.pointer = null; joystick.x = 0; joystick.y = 0; $('#joystick-thumb').style.transform = ''; });
 
-const help = `<h2 class="info-title">飞行操作指南</h2><section class="info-section"><h3>净空体验</h3><p>移动鼠标选择航向，点击翻滚，按住鼠标或 <kbd>Shift</kbd> 加速。<kbd>空格</kbd> 在俯视、追尾和座舱之间切换。也可以用 <kbd>WASD</kbd> 或方向键操控；保留原版飞行杆方向：向下拉升、向上俯冲。</p></section><section class="info-section"><h3>1940 · 海峡空战</h3><p><kbd>A D</kbd> / <kbd>← →</kbd> 转向，<kbd>W S</kbd> / <kbd>↑ ↓</kbd> 升降。按住 <kbd>空格</kbd> 或鼠标左键射击，<kbd>Shift</kbd> 加速。把前方瞄准环指向敌机；连续射击会过热，短点射更有效。</p><p>雷达中心是你的位置，红点是敌机。敌机会追击、开火和脱离，留意机体耐久。<kbd>P</kbd> / <kbd>Esc</kbd> 暂停。</p></section><section class="info-section"><h3>手机与平板</h3><p>左侧摇杆转向与升降，右侧按钮射击和加速；净空模式提供翻滚按钮。横屏能获得更宽的视野。切到后台会自动暂停。</p></section>`;
-const credits = `<h2 class="info-title">关于 Airplanes</h2><section class="info-section"><h3>两种飞行体验</h3><p>净空体验迁移自 Dash 的 Fly / fighter 演示。海峡空战在这个像素渲染基础上加入独立的二战飞机、涂装、战斗系统与任务。</p></section><section class="info-section"><h3>来源与署名</h3><p>原版作者：Dash / @creativedash。<a href="https://remix.ui8.ai/fly" target="_blank" rel="noreferrer">原分享页</a> · <a href="./THIRD_PARTY_NOTICES.md" target="_blank">第三方说明</a></p><p>Airplanes 新增玩法、界面、程序化机型与涂装由 ForceMind 项目维护。原版源码保留其作者权利与来源，不被重新标记为本项目原创。</p></section><section class="info-section"><h3>首版范围</h3><p>本版提供单人对 AI 的街机空战。机型与涂装为二战历史风格演绎，任务为虚构情景；不包含联网多人或精确飞行模拟。</p><a href="https://github.com/ForceMind/Airplanes" target="_blank" rel="noreferrer">访问项目仓库 ↗</a></section>`;
+const help = `<h2 class="info-title">飞行操作指南</h2><section class="info-section"><h3>净空体验</h3><p>移动鼠标选择航向，点击翻滚，按住鼠标或 <kbd>Shift</kbd> 加速。<kbd>空格</kbd> 在俯视、追尾和座舱之间切换。也可以用 <kbd>WASD</kbd> 或方向键操控；保留原版飞行杆方向：向下拉升、向上俯冲。</p></section><section class="info-section"><h3>1940 · 海峡空战</h3><p><kbd>A D</kbd> / <kbd>← →</kbd> 转向，<kbd>W S</kbd> / <kbd>↑ ↓</kbd> 升降。按住 <kbd>空格</kbd> 或鼠标左键射击，<kbd>Shift</kbd> 加速。把前方瞄准环指向敌机；连续射击会过热，短点射更有效。</p><p>雷达中心是你的位置，红点是敌机。敌机会从画面外飞入，随后追击、开火和脱离。喷火式以八挺翼枪齐射，Bf 109 E-4 同时使用两挺机枪和两门机炮。曳光弹间隔出现，留意机体耐久。<kbd>P</kbd> / <kbd>Esc</kbd> 暂停。</p></section><section class="info-section"><h3>手机与平板</h3><p>左侧摇杆转向与升降，右侧按钮射击和加速；净空模式提供翻滚按钮。横屏能获得更宽的视野。切到后台会自动暂停。</p></section>`;
+const credits = `<h2 class="info-title">关于 Airplanes</h2><section class="info-section"><h3>两种飞行体验</h3><p>净空体验迁移自 Dash 的 Fly / fighter 演示。海峡空战在这个像素渲染基础上加入独立的二战飞机、涂装、战斗系统与任务。</p></section><section class="info-section"><h3>来源与署名</h3><p>原版作者：Dash / @creativedash。<a href="https://remix.ui8.ai/fly" target="_blank" rel="noreferrer">原分享页</a> · <a href="./THIRD_PARTY_NOTICES.md" target="_blank">第三方说明</a></p><p>Airplanes 新增玩法、界面、程序化机型与涂装由 ForceMind 项目维护。原版源码保留其作者权利与来源，不被重新标记为本项目原创。</p></section><section class="info-section"><h3>机型与玩法</h3><p>V0.2 按喷火式 Mk Ia 与 Bf 109 E-4 的机体比例、三叶桨和武器配置制作像素模型，机库可查看枪位。<a href="./docs/AIRCRAFT_REFERENCE.md" target="_blank">机型参考与建模说明 ↗</a></p><p>本版提供单人对 AI 的街机空战，飞行、伤害与武器散热为游戏设定。任务为虚构情景，创意涂装已标注；不包含联网多人或精确飞行模拟。</p><a href="https://github.com/ForceMind/Airplanes" target="_blank" rel="noreferrer">访问项目仓库 ↗</a></section>`;
 $$('[data-action="help"]').forEach(button => button.addEventListener('click', () => { $('#info-content').innerHTML = help; $('#info-dialog').showModal(); }));
 $$('[data-action="credits"]').forEach(button => button.addEventListener('click', () => { $('#info-content').innerHTML = credits; $('#info-dialog').showModal(); }));
 $('.dialog-close').addEventListener('click', () => $('#info-dialog').close());

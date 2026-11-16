@@ -1,9 +1,10 @@
 /**
- * Airplanes original aircraft art, 2026.
- * Procedural voxel sketches inspired by WWII silhouettes; not museum replicas.
- * No geometry or palette data from the upstream modern fighter is used here.
- * Coordinates are centred: x right, y forward (nose), z up.
+ * Original procedural 1940 airframes. Metres are sampled into five voxels;
+ * small details are reconstructed, not scans of a surviving aircraft.
+ * Local axes: x starboard/right, y forward/nose, z up. See AIRCRAFT_REFERENCE.
  */
+import { getAircraftSpec, spitfireLeadingEdge, bf109LeadingEdge } from './aircraft-specs.js';
+import { createPropellerVoxels, propellerPhase } from '../engine/propeller.js';
 
 const skin = (id, name, description, body, accent, canopy, underside, marking) => ({
   id, name, description, colors: { body, accent, canopy, underside, marking },
@@ -11,193 +12,250 @@ const skin = (id, name, description, body, accent, canopy, underside, marking) =
 
 export const AIRCRAFT = [
   {
-    id: 'spitfire', faction: 'raf', name: 'Spitfire', subtitle: '皇家空军 · 喷火式',
-    description: '椭圆机翼与轻盈机身。以二战机型轮廓为灵感的原创像素飞机。',
+    id: 'spitfire', faction: 'raf', name: 'Spitfire Mk Ia', subtitle: '皇家空军 · 1940 年喷火 Mk Ia',
+    description: '椭圆 A 型机翼、Merlin 发动机、三叶螺旋桨；八挺 .303 机枪分列两翼。',
     skins: [
-      skin('raf-classic', '英伦绿棕', '草绿与褐色迷彩，浅色机腹。', '#64704a', '#846951', '#82b9c8', '#b3bba3', '#d9dfcf'),
-      skin('raf-coastal', '海岸灰绿', '海雾灰与深绿，低调的海岸巡航涂装。', '#7c8c91', '#52695f', '#8dced8', '#bac7c6', '#e1ddd0'),
-      skin('raf-night', '午夜巡航', '深蓝灰机身，保留机翼圆徽。', '#354450', '#50515a', '#70acbf', '#25323e', '#aeb6b4'),
-      skin('raf-silver', '纪念银翼', '银色机体与深灰拼接的纪念涂装。', '#bdc6c9', '#8c969f', '#73aabe', '#8998a2', '#dddcd2'),
+      skin('raf-classic', '英伦绿棕', '1940 年风格：深绿与深土色上表面、Sky 色机腹、红蓝上翼圆徽。', '#556043', '#80654b', '#82b9c8', '#b8bca0', '#b2b69c'),
+      skin('raf-coastal', '海岸灰绿', '创意涂装 · 海雾灰与深绿，沿用 Mk Ia 机体。', '#7c8c91', '#52695f', '#8dced8', '#bac7c6', '#e1ddd0'),
+      skin('raf-night', '午夜巡航', '创意涂装 · 深蓝灰夜航配色，非 1940 年指定部队复原。', '#354450', '#50515a', '#70acbf', '#25323e', '#aeb6b4'),
+      skin('raf-silver', '纪念银翼', '创意涂装 · 银色机体与深灰拼接的纪念配色。', '#bdc6c9', '#8c969f', '#73aabe', '#8998a2', '#dddcd2'),
     ],
   },
   {
-    id: 'bf109', faction: 'luftwaffe', name: 'Bf 109', subtitle: '德国空军 · Bf 109',
-    description: '长机首与收窄梯形机翼。采用独立螺旋桨机体和普通十字识别标记。',
+    id: 'bf109', faction: 'luftwaffe', name: 'Bf 109 E-4', subtitle: '德国空军 · 1940 年 Bf 109 E-4',
+    description: '直线梯形翼、方框座舱、翼下双散热器；机鼻双 MG 17 与两翼 20 毫米机炮。',
     skins: [
-      skin('luftwaffe-grey', '灰绿猎隼', '灰绿迷彩、浅蓝机腹与黄色识别带。', '#6f7866', '#4c5b52', '#95c0c7', '#afc4c8', '#e9bd45'),
-      skin('luftwaffe-desert', '沙漠黄沙', '沙黄机体搭配褐色斑纹。', '#c2a470', '#92794f', '#91bfc5', '#b9c4ba', '#e5bc4c'),
-      skin('luftwaffe-winter', '冬季白霜', '白灰底色搭配稀疏的灰绿斑纹。', '#d6dbd5', '#8e9b94', '#8ebfce', '#b6c4c9', '#e1b744'),
-      skin('luftwaffe-night', '夜雾石墨', '石墨灰与暗蓝的夜航风格涂装。', '#424b52', '#2d3944', '#72a1b0', '#313c46', '#c6a04e'),
+      skin('luftwaffe-grey', '灰绿猎隼', '1940 年风格：灰绿拼块、浅蓝机腹、黄色机罩与方向舵；不指定中队。', '#8a927c', '#475447', '#95c0c7', '#afc4c8', '#dfb943'),
+      skin('luftwaffe-desert', '沙漠黄沙', '创意涂装 · 沙黄与褐色斑纹，不作为 1940 年英伦空战史实。', '#c2a470', '#92794f', '#91bfc5', '#b9c4ba', '#e5bc4c'),
+      skin('luftwaffe-winter', '冬季白霜', '创意涂装 · 白灰底色与稀疏灰绿斑纹，沿用 E-4 机体。', '#d6dbd5', '#8e9b94', '#8ebfce', '#b6c4c9', '#e1b744'),
+      skin('luftwaffe-night', '夜雾石墨', '创意涂装 · 石墨灰与暗蓝的夜航配色。', '#424b52', '#2d3944', '#72a1b0', '#313c46', '#c6a04e'),
     ],
   },
 ];
 
 const cache = new Map();
-const clampByte = (n) => Math.max(0, Math.min(255, Math.round(n)));
-
-/** Packed RGBA suitable for the upstream little-endian Uint32 pixel buffer. */
-function pack(r, g, b) {
-  return ((255 << 24) | (clampByte(b) << 16) | (clampByte(g) << 8) | clampByte(r)) >>> 0;
-}
-
-function rgb(hex) {
-  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
-}
-
+const clampByte = n => Math.max(0, Math.min(255, Math.round(n)));
+const pack = (r, g, b) => ((255 << 24) | (clampByte(b) << 16) | (clampByte(g) << 8) | clampByte(r)) >>> 0;
 function shaded(hex, amount = 1) {
-  const c = rgb(hex);
-  return pack(c[0] * amount, c[1] * amount, c[2] * amount);
+  return pack(parseInt(hex.slice(1, 3), 16) * amount,
+    parseInt(hex.slice(3, 5), 16) * amount, parseInt(hex.slice(5, 7), 16) * amount);
 }
 
 export function getAircraft(id) {
-  return AIRCRAFT.find((a) => a.id === id) || AIRCRAFT[0];
+  return AIRCRAFT.find(a => a.id === id) || AIRCRAFT[0];
 }
-
 export function getSkin(aircraftId, skinId) {
   const aircraft = getAircraft(aircraftId);
-  return aircraft.skins.find((s) => s.id === skinId) || aircraft.skins[0];
+  return aircraft.skins.find(s => s.id === skinId) || aircraft.skins[0];
 }
 
 function buildModel(aircraft, selectedSkin) {
+  const spec = getAircraftSpec(aircraft.id);
   const isRAF = aircraft.faction === 'raf';
   const colors = selectedSkin.colors;
+  const span = Math.round(spec.dimensions.wingspanMetres * spec.unitsPerMetre);
+  const length = Math.round(spec.dimensions.lengthMetres * spec.unitsPerMetre);
+  const minX = -(span - 1) / 2, minY = -(length - 1) / 2;
+  const maxX = -minX, maxY = -minY;
   const cells = new Map();
-  const put = (x, y, z, color) => cells.set(`${x},${y},${z}`, { x, y, z, color: color >>> 0 });
+  const put = (x, y, z, color, part) => {
+    const v = { x, y, z, color: color >>> 0, part };
+    cells.set(`${x},${y},${z}`, v);
+  };
+  const paint = (x, y, z, part = 'airframe') => put(x, y, z, topColor(x, y, z), part);
   const topColor = (x, y, z) => {
-    // Two analytic colour bands keep the texture original and deterministic.
-    const pattern = Math.sin(x * 0.37 + y * 0.29) + Math.sin(y * 0.63 - x * 0.11) * 0.45;
-    const base = z < 0 ? colors.underside : pattern > 0.28 ? colors.accent : colors.body;
-    return shaded(base, z < 0 ? 0.79 : 0.91 + Math.min(0.16, z * 0.033) + (x < 0 ? 0.035 : -0.015));
+    // RAF curved fields; German straight splinter fields. They are original
+    // patterns rather than invented squadron markings or a copied skin atlas.
+    const band = isRAF
+      ? Math.sin(x * .21 + y * .16) + Math.sin(y * .39 - x * .09) * .55
+      : Math.sin(Math.floor((x + y * .65) / 10) * 2.9 + Math.floor((y - x * .16) / 9));
+    const base = z < 0 ? colors.underside : band > .18 ? colors.accent : colors.body;
+    return shaded(base, z < 0 ? .83 : .93 + Math.min(.14, z * .025) + (x < 0 ? .025 : -.015));
   };
 
-  // Main wings: an elliptical planform for Spitfire, tapered straight edges for Bf 109.
-  const span = isRAF ? 18 : 16;
-  for (let x = -span; x <= span; x++) {
+  // Main planes use their full real span, independently of fuselage length.
+  // A-wing elliptical front/rear edges versus the E-wing's straight taper.
+  for (let x = minX; x <= maxX; x++) {
     const ax = Math.abs(x);
-    let front, back;
-    if (isRAF) {
-      const chord = 7.1 * Math.sqrt(Math.max(0, 1 - (ax / 18.2) ** 2));
-      const centre = 1.8 - ax * 0.13;
-      front = centre + chord;
-      back = centre - chord;
+    const front = isRAF ? spitfireLeadingEdge(x) : bf109LeadingEdge(x);
+    const back = isRAF
+      ? 2.2 - ax * .08 - 6.65 * Math.sqrt(Math.max(0, 1 - (x / (11.23 * 2.5)) ** 2))
+      : -4.5 + ax * .16;
+    for (let y = minY; y <= maxY; y++) {
+      if (y < back || y > front) continue;
+      paint(x, y, 0, 'wing');
+      // Fine tips; the low main plane has a thin underside, not a thick slab.
+      if (ax < maxX - 2 && y > back + .8 && y < front - .6) paint(x, y, -1, 'wing');
+    }
+  }
+
+  // Distinct horizontal stabilisers: rounded Spitfire versus braced E-4 taper.
+  for (let x = -8; x <= 8; x++) {
+    const ax = Math.abs(x);
+    if (!isRAF && ax > 7) continue;
+    const arc = Math.sqrt(Math.max(0, 1 - (x / 8.4) ** 2));
+    const front = isRAF ? -17.6 + 2.8 * arc : -14.8 - ax * .32;
+    const back = isRAF ? -17.6 - 3.65 * arc : -21.2 + ax * .27;
+    for (let y = minY; y <= maxY; y++) {
+      if (y >= back && y <= front) paint(x, y, isRAF ? 1 : 2, 'tailplane');
+    }
+  }
+
+  // Slender, long inline-engine fuselages. The inverted DB 601 has a deeper
+  // lower cowling; the Merlin's upper line and rear spine are more rounded.
+  const bodyEnd = isRAF ? 19.5 : 18.5;
+  for (let y = minY; y <= bodyEnd; y++) {
+    let halfWidth, halfHeight, centreZ;
+    if (y < -6) {
+      const t = (y - minY) / (-6 - minY);
+      halfWidth = .55 + t * (isRAF ? 2.1 : 1.8);
+      halfHeight = .75 + t * 2.05;
+      centreZ = isRAF ? .7 : .6;
+    } else if (y < 8) {
+      halfWidth = isRAF ? 2.65 : 2.4;
+      halfHeight = isRAF ? 3 : 2.8;
+      centreZ = isRAF ? .35 : -.05;
     } else {
-      front = 8.5 - ax * 0.47;
-      back = -5.2 + ax * 0.095;
+      const t = (y - 8) / (bodyEnd - 8);
+      halfWidth = (isRAF ? 2.55 : 2.4) - t * .95;
+      halfHeight = (isRAF ? 2.65 : 2.8) - t * 1.1;
+      centreZ = isRAF ? .2 : -.25;
     }
-    for (let y = Math.ceil(back); y <= Math.floor(front); y++) {
-      for (let z = ax > span - 3 ? 0 : -1; z <= 1; z++) {
-        put(x, y, z, topColor(x, y, z));
-      }
-    }
-  }
-
-  // The tailplane is swept and shorter than the main wings.
-  const tailSpan = isRAF ? 8 : 7;
-  for (let x = -tailSpan; x <= tailSpan; x++) {
-    const ax = Math.abs(x);
-    const front = (isRAF ? -11.8 : -12.3) - ax * 0.29;
-    const back = -18.6 + ax * 0.22;
-    for (let y = Math.ceil(back); y <= Math.floor(front); y++) {
-      for (let z = 0; z <= 1; z++) put(x, y, z, topColor(x, y, z));
-    }
-  }
-
-  // Elliptical fuselage cross-sections taper independently at the tail and spinner.
-  const tailEnd = isRAF ? -20 : -21;
-  const noseEnd = isRAF ? 20 : 22;
-  for (let y = tailEnd; y <= noseEnd; y++) {
-    let halfWidth;
-    if (y < -5) halfWidth = 0.7 + (y - tailEnd) / (-5 - tailEnd) * 1.8;
-    else if (y < 10) halfWidth = isRAF ? 2.65 : 2.3;
-    else halfWidth = (isRAF ? 2.5 : 2.2) - ((y - 10) / (noseEnd - 10)) * 1.35;
-    const halfHeight = y < -9 ? 1.4 : y > 16 ? 1.85 : 2.5;
-    for (let x = -3; x <= 3; x++) {
-      for (let z = -2; z <= 3; z++) {
-        if ((x / halfWidth) ** 2 + ((z - 0.2) / halfHeight) ** 2 > 1.13) continue;
+    for (let x = minX; x <= maxX; x++) {
+      if (Math.abs(x) > halfWidth) continue;
+      for (let z = -3; z <= 4; z++) {
+        const profile = (x / halfWidth) ** 2 + ((z - centreZ) / halfHeight) ** 2;
+        if (profile > 1.12) continue;
         let color = topColor(x, y, z);
-        if (y >= -12 && y <= -10 && z >= 0) color = shaded(colors.marking, 0.95);
-        if (!isRAF && y >= 16 && z >= 0) color = shaded(colors.marking, 0.86 + z * 0.04);
-        if (z >= 2 && y >= 11 && y <= 15 && Math.abs(x) === 2) color = pack(41, 40, 37); // exhausts
-        put(x, y, z, color);
+        if (!isRAF && y >= 12.5) color = shaded(colors.marking, .83 + (z + 3) * .035);
+        put(x, y, z, color, 'fuselage');
       }
     }
   }
 
-  // Cockpit glass: the Bf 109 has a more angular, aft-set canopy.
-  const cabinFront = isRAF ? 7 : 4;
-  const cabinBack = isRAF ? -1 : -4;
-  for (let y = cabinBack; y <= cabinFront; y++) {
-    for (let x = -1; x <= 1; x++) {
-      for (let z = 3; z <= 5; z++) {
-        if (z === 5 && (Math.abs(x) > 0 || y === cabinBack || y === cabinFront)) continue;
-        const frame = y === cabinBack || y === cabinFront || (!isRAF && y === 0);
-        let color = frame ? shaded(colors.body, 0.78) : shaded(colors.canopy, 0.78 + (z - 3) * 0.17);
-        if (!frame && x === -1 && z === 4 && y > cabinBack + 1) color = pack(206, 227, 222);
-        put(x, y, z, color);
+  // Mk Ia's rounded hood and E-4's framed, flat-top canopy are separate shapes.
+  const canopyBack = isRAF ? -5.5 : -4.5;
+  const canopyFront = isRAF ? 3.5 : 3.5;
+  for (let y = canopyBack; y <= canopyFront; y++) {
+    const windscreen = y >= canopyFront - 1;
+    const cap = isRAF ? (windscreen || y === canopyBack ? 4 : 5) : (windscreen ? 4 : 5);
+    for (let x = -1.5; x <= 1.5; x++) {
+      for (let z = 3; z <= cap; z++) {
+        if (isRAF && z === 5 && Math.abs(x) > .5) continue;
+        const frame = y === canopyBack || y === canopyFront || (!isRAF && (y === -1.5 || Math.abs(x) === 1.5 && z === 5));
+        const glass = x < 0 && z >= 4 ? shaded(colors.canopy, 1.17) : shaded(colors.canopy, .82 + (z - 3) * .1);
+        put(x, y, z, frame ? shaded(colors.body, .63) : glass, 'canopy');
       }
     }
   }
+  // Rear fixed glazing and the early radio mast; no later bubble/Erla hood.
+  for (let y = -7.5; y < canopyBack; y++) put(0, y, 3, shaded(colors.canopy, .65), 'canopy');
+  for (let z = 4; z <= 6; z++) put(0, isRAF ? -7.5 : -6.5, z, shaded(colors.body, .63), 'mast');
 
-  // A real vertical fin rises above the tail, as opposed to a flat sprite outline.
-  for (let z = 2; z <= (isRAF ? 6 : 7); z++) {
-    const start = (isRAF ? -19 : -20) + Math.floor((z - 2) * 0.28);
-    const end = -12 - Math.ceil((z - 2) * 0.64);
-    for (let y = start; y <= end; y++) {
-      put(0, y, z, topColor(-1, y, z));
-      if (z <= 3) {
-        put(-1, y, z, topColor(-1, y, z));
-        put(1, y, z, topColor(1, y, z));
+  // Rounded rudder/fin with the E-4's narrower, taller upright silhouette.
+  for (let z = 2; z <= (isRAF ? 7 : 8); z++) {
+    const t = (z - 2) / (isRAF ? 5 : 6);
+    const start = minY + (isRAF ? Math.round(t * 2) : Math.round(t * 1.5));
+    const end = isRAF ? -14.2 - t * 4 : -15.5 - t * 3;
+    for (let y = minY; y <= maxY; y++) {
+      if (y < start || y > end) continue;
+      let color = topColor(0, y, z);
+      if (!isRAF && y <= -18.5) color = shaded(colors.marking, .94);
+      if (isRAF && y >= -19.5 && y <= -17.5 && z >= 3 && z <= 6) {
+        color = y < -18.5 ? pack(38, 55, 77) : y < -17.5 ? pack(223, 221, 200) : pack(161, 54, 45);
       }
+      put(0, y, z, color, 'fin');
     }
   }
 
-  // Wing identifiers are painted on the upper slice only.
+  const darkMetal = pack(53, 49, 44), exhaustLip = pack(105, 91, 77);
+  // Short lateral exhausts, never a rear jet nozzle or a permanent flame.
   for (const side of [-1, 1]) {
-    const cx = side * (isRAF ? 11 : 10);
-    const cy = isRAF ? 1 : -1;
-    for (let dx = -3; dx <= 3; dx++) {
-      for (let dy = -3; dy <= 3; dy++) {
-        const key = `${cx + dx},${cy + dy},1`;
-        if (!cells.has(key)) continue;
-        if (isRAF) {
-          const r = Math.hypot(dx, dy);
-          if (r <= 2.7) put(cx + dx, cy + dy, 1, r < 1.05 ? pack(176, 55, 48) : r < 1.9 ? pack(224, 220, 194) : pack(39, 64, 94));
-        } else {
-          // Ordinary aircraft-recognition cross, with a light border.
-          if (Math.max(Math.abs(dx), Math.abs(dy)) <= 2 && Math.min(Math.abs(dx), Math.abs(dy)) <= 1) {
-            put(cx + dx, cy + dy, 1, dx === 0 || dy === 0 ? pack(35, 39, 40) : pack(218, 220, 207));
-          }
+    const exhaustYs = isRAF ? [7.5, 10, 12.5] : [7.3, 8.7, 10.1, 11.5, 12.9, 14.3];
+    for (const y of exhaustYs) {
+      put(side * 2.5, y, isRAF ? 1 : 0, exhaustLip, 'exhaust');
+      put(side * 3.05, y - .2, isRAF ? 1 : 0, darkMetal, 'exhaust');
+    }
+  }
+
+  // Mk I: starboard radiator and smaller port oil cooler. E-4: paired wing
+  // radiator baths plus a chin oil cooler and asymmetric supercharger intake.
+  const radiator = (cx, halfWidth, yBack, yFront, depth, part) => {
+    for (let x = cx - halfWidth; x <= cx + halfWidth; x++) {
+      for (let y = yBack; y <= yFront; y++) {
+        for (let z = -depth; z <= -1; z++) {
+          put(x, y, z, y === yFront && z <= -2 ? darkMetal : shaded(colors.underside, .74 + (z + depth) * .045), part);
         }
       }
     }
-  }
-
-  // Nose spinner and two crossed blades visibly distinguish propeller aircraft.
-  const propY = noseEnd + 1;
-  for (let x = -6; x <= 6; x++) {
-    if (Math.abs(x) < 2) continue;
-    put(x, propY, 0, Math.abs(x) >= 5 ? pack(224, 192, 97) : pack(54, 59, 59));
-    put(x, propY, 1, pack(93, 98, 94));
-  }
-  for (let z = -4; z <= 5; z++) {
-    if (Math.abs(z) < 2) continue;
-    put(0, propY, z, Math.abs(z) >= 4 ? pack(224, 192, 97) : pack(54, 59, 59));
-  }
-  for (let y = noseEnd; y <= propY + 1; y++) {
-    const radius = y === propY + 1 ? 0 : 1;
-    for (let x = -radius; x <= radius; x++) {
-      for (let z = -radius; z <= radius; z++) {
-        put(x, y, z, shaded(isRAF ? colors.body : colors.marking, 1.05));
+  };
+  if (isRAF) {
+    radiator(7, 1.5, -4.5, 1.5, 3, 'radiator');
+    radiator(-7, 1, -2.5, .5, 2, 'oil-cooler');
+    radiator(0, .5, 4.5, 7.5, 3, 'carburettor-intake');
+  } else {
+    radiator(-7.5, 2, -4.5, .5, 3, 'radiator');
+    radiator(7.5, 2, -4.5, .5, 3, 'radiator');
+    radiator(0, .5, 10.5, 14.5, 4, 'oil-cooler');
+    for (let y = 5.5; y <= 8.5; y++) put(-3, y, 0, y === 8.5 ? darkMetal : shaded(colors.body, .8), 'supercharger-intake');
+    for (const side of [-1, 1]) {
+      for (let step = 0; step <= 5; step++) {
+        put(side * (1.3 + step * .65), -17.5, -1 + step * .5, shaded(colors.body, .7), 'tail-strut');
       }
     }
   }
 
+  // Recognition marks are paint on actual wing cells. RAF upper-wing Type B
+  // is red/blue; fuselage circles have the separate white/yellow rings.
+  for (const v of cells.values()) {
+    if (v.part !== 'wing' || v.z !== 0) continue;
+    const dx = Math.abs(v.x) - (isRAF ? 19 : 17), dy = v.y - (isRAF ? .5 : 1.5);
+    if (isRAF) {
+      const r = Math.hypot(dx, dy);
+      if (r <= 3.1) v.color = r < 1.25 ? pack(162, 52, 44) : pack(32, 48, 74);
+    } else if (Math.max(Math.abs(dx), Math.abs(dy)) <= 2.2 && Math.min(Math.abs(dx), Math.abs(dy)) <= 1.15) {
+      v.color = Math.abs(dx) <= .55 || Math.abs(dy) <= .55 ? pack(32, 36, 34) : pack(220, 220, 204);
+    }
+  }
+  if (isRAF) {
+    for (const v of cells.values()) {
+      if (v.part !== 'fuselage' || Math.abs(v.x) < 1.4 || v.y < -12.5 || v.y > -8.5) continue;
+      const r = Math.hypot(v.y + 10.5, v.z - 1.4);
+      if (r > 2.1) continue;
+      v.color = r < .75 ? pack(163, 53, 43) : r < 1.15 ? pack(225, 221, 203) : r < 1.75 ? pack(37, 52, 78) : pack(210, 179, 73);
+    }
+  }
+
+  // Gun geometry and combat share these exact muzzle coordinates. Brownings
+  // are flush ports; E-4's MG FF/M wing cannon project ahead of the leading edge.
+  for (const mount of spec.gunMounts) {
+    if (mount.kind === 'cannon') {
+      for (let y = mount.y - 2; y < mount.y; y += .5) put(mount.x, y, mount.z, darkMetal, 'cannon-barrel');
+      put(mount.x, mount.y - 1.5, mount.z + .5, shaded(colors.body, .75), 'cannon-fairing');
+    } else if (!isRAF) {
+      for (let y = mount.y - 3; y < mount.y; y += .5) put(mount.x, y, mount.z, shaded(colors.marking, .5), 'gun-trough');
+    }
+    put(mount.x, mount.y, mount.z, pack(24, 27, 25), 'gun-port');
+  }
+
+  // Spinner is static; all three blades live in the independently rotated mesh.
+  const hub = spec.propeller;
+  for (let y = hub.y - .6; y < maxY; y += .65) {
+    const t = (y - (hub.y - .6)) / (maxY - (hub.y - .6));
+    const radius = hub.hubRadius * Math.sqrt(Math.max(0, 1 - t));
+    for (let x = -1.5; x <= 1.5; x++) {
+      for (let z = -1; z <= 1; z++) {
+        if (x * x + (z - hub.z) ** 2 <= radius * radius) put(x, y, z, shaded(colors.body, 1.02), 'spinner');
+      }
+    }
+  }
+  put(0, maxY, hub.z, shaded(colors.body, 1.04), 'spinner');
+
   const voxels = [...cells.values()];
-  const xs = voxels.map((v) => v.x), ys = voxels.map((v) => v.y), zs = voxels.map((v) => v.z);
   const bounds = {
-    minX: Math.min(...xs), maxX: Math.max(...xs),
-    minY: Math.min(...ys), maxY: Math.max(...ys),
-    minZ: Math.min(...zs), maxZ: Math.max(...zs),
+    minX: Math.min(...voxels.map(v => v.x)), maxX: Math.max(...voxels.map(v => v.x)),
+    minY: Math.min(...voxels.map(v => v.y)), maxY: Math.max(...voxels.map(v => v.y)),
+    minZ: Math.min(...voxels.map(v => v.z)), maxZ: Math.max(...voxels.map(v => v.z)),
   };
   return Object.freeze({
     id: aircraft.id, faction: aircraft.faction, skinId: selectedSkin.id,
@@ -205,12 +263,13 @@ function buildModel(aircraft, selectedSkin) {
     length: bounds.maxY - bounds.minY + 1,
     height: bounds.maxZ - bounds.minZ + 1,
     pivotY: 0, pivotK: 0, bounds: Object.freeze(bounds),
-    propeller: Object.freeze({ x: 0, y: propY, z: 0, radius: 6 }),
+    modelScale: spec.modelScale, spec, gunMounts: spec.gunMounts,
+    propeller: spec.propeller,
     voxels: Object.freeze(voxels.map(Object.freeze)),
   });
 }
 
-/** Cached, immutable geometry. An invalid skin falls back within its own aircraft. */
+/** Cached, immutable geometry. Invalid skins fall back within their aircraft. */
 export function createAircraftModel(aircraftId, skinId) {
   const aircraft = getAircraft(aircraftId);
   const selectedSkin = getSkin(aircraft.id, skinId);
@@ -220,35 +279,57 @@ export function createAircraftModel(aircraftId, skinId) {
 }
 
 /**
- * Small offline hangar preview. No DOM access, asset request, or animation loop.
- * width/height refer to the canvas backing pixels; the caller owns DPR sizing.
+ * Offline hangar preview. Caller owns DPR and the animation loop. `time` is in
+ * seconds; omit it for a still three-blade prop. Optional showHardpoints marks
+ * real muzzle positions: gold = machine gun, orange = cannon.
  */
 export function drawAircraftPreview(ctx, model, options = {}) {
-  const width = options.width || ctx.canvas.width;
-  const height = options.height || ctx.canvas.height;
-  const rotation = options.rotation ?? -0.48;
-  const elevation = options.elevation ?? 0.61;
-  const size = options.scale ?? Math.min((width - 24) / (model.width * 1.25), (height - 22) / (model.length * 0.82));
+  const width = options.width || ctx.canvas.width, height = options.height || ctx.canvas.height;
+  const rotation = options.rotation ?? -.48, elevation = options.elevation ?? .78;
   const cs = Math.cos(rotation), sn = Math.sin(rotation);
-  const draw = model.voxels.map((v) => {
-    const across = v.x * cs + v.y * sn;
-    const forward = -v.x * sn + v.y * cs;
-    return { x: width / 2 + across * size, y: height / 2 + 6 - (forward * elevation + v.z * 0.92) * size, depth: forward + v.z * 1.8, color: v.color };
-  });
-  // Nearer/high surfaces cover rear/lower ones in this fixed preview camera.
-  draw.sort((a, b) => a.depth - b.depth);
+  const phase = Number.isFinite(options.time)
+    ? propellerPhase(options.time, options.speed ?? 92, model.propeller)
+    : options.propellerPhase ?? .2;
+  const project = v => {
+    const across = v.x * cs + v.y * sn, forward = -v.x * sn + v.y * cs;
+    return { x: across, y: -(forward * elevation + v.z * Math.sqrt(Math.max(0, 1 - elevation * elevation))),
+      depth: forward * Math.sqrt(Math.max(0, 1 - elevation * elevation)) - v.z * elevation, color: v.color };
+  };
+  const draw = [...model.voxels, ...createPropellerVoxels(model.propeller, phase)].map(project);
+  // Fit the full rotational envelope, so animating the prop never pumps scale.
+  const fit = [...model.voxels, ...[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map(a => ({
+    x: model.propeller.x + Math.cos(a) * model.propeller.radius,
+    y: model.propeller.y, z: model.propeller.z + Math.sin(a) * model.propeller.radius,
+  }))].map(project);
+  const xs = fit.map(v => v.x), ys = fit.map(v => v.y);
+  const minPX = Math.min(...xs), maxPX = Math.max(...xs), minPY = Math.min(...ys), maxPY = Math.max(...ys);
+  const size = options.scale ?? Math.max(.1, Math.min((width - 28) / (maxPX - minPX + 2), (height - 28) / (maxPY - minPY + 2)));
+  const centreX = (minPX + maxPX) / 2, centreY = (minPY + maxPY) / 2;
+  const screen = p => ({ x: width / 2 + (p.x - centreX) * size, y: height / 2 + (p.y - centreY) * size });
+  // Camera is above the aft quarter; smaller depth is nearer.
+  draw.sort((a, b) => b.depth - a.depth);
   ctx.save();
   ctx.clearRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = false;
-  const pixel = Math.max(1, Math.ceil(size * 1.18));
+  const pixel = Math.max(1, Math.ceil(size * 1.08));
   let lastColor = -1;
   for (const p of draw) {
     if (p.color !== lastColor) {
-      const c = p.color;
-      ctx.fillStyle = `rgb(${c & 255},${(c >>> 8) & 255},${(c >>> 16) & 255})`;
-      lastColor = c;
+      ctx.fillStyle = `rgb(${p.color & 255},${(p.color >>> 8) & 255},${(p.color >>> 16) & 255})`;
+      lastColor = p.color;
     }
-    ctx.fillRect(Math.round(p.x - pixel / 2), Math.round(p.y - pixel / 2), pixel, pixel);
+    const point = screen(p);
+    ctx.fillRect(Math.round(point.x - pixel / 2), Math.round(point.y - pixel / 2), pixel, pixel);
+  }
+  if (options.showHardpoints) {
+    const marker = Math.max(3, Math.min(6, Math.round(size * 1.25)));
+    for (const mount of model.gunMounts) {
+      const p = screen(project(mount));
+      ctx.fillStyle = '#162329';
+      ctx.fillRect(Math.round(p.x - marker / 2) - 1, Math.round(p.y - marker / 2) - 1, marker + 2, marker + 2);
+      ctx.fillStyle = mount.kind === 'cannon' ? '#ff874e' : '#f5d97b';
+      ctx.fillRect(Math.round(p.x - marker / 2), Math.round(p.y - marker / 2), marker, marker);
+    }
   }
   ctx.restore();
 }

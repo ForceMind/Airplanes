@@ -200,9 +200,11 @@ export function createFlameLayer(canvas) {
   const uSeed = u('uSeed')
   const uH = u('uH')
   let drawn = true // whether the canvas has anything on it (it starts unknown, so it is cleared once)
+  let disposed = false
 
   return {
     draw(count, data, scale, time) {
+      if (disposed) return
       if (count === 0 && !drawn) return
       const cw = canvas.width
       const ch = canvas.height
@@ -246,6 +248,14 @@ export function createFlameLayer(canvas) {
       }
     },
     dispose() {
+      if (disposed) return
+      // Deleting GPU objects does not erase the canvas's last composite. Clear
+      // the full transparent layer before a propeller-flight scene reuses it.
+      gl.disable(gl.SCISSOR_TEST)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      drawn = false
+      disposed = true
       gl.deleteProgram(prog)
       gl.deleteShader(vs)
       gl.deleteShader(fs)

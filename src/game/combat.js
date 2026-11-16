@@ -4,6 +4,9 @@
  * World axes: x east, y south, z up; yaw 0 faces north (-y).
  */
 
+import { getAircraftSpec } from './aircraft-specs.js';
+import { CONVERGENCE_DISTANCE, muzzleWorldPosition, createGunStates, gameBallistics } from './ordnance.js';
+
 export const WORLD_SIZE = 2048;
 
 export const MISSIONS = Object.freeze({
@@ -28,14 +31,14 @@ export const DIFFICULTIES = Object.freeze({
   rookie: Object.freeze({
     id: 'rookie', title: '新兵', label: '新兵',
     enemyHealth: 60, enemySpeed: 82, turnRate: 0.88,
-    shotInterval: 0.42, damage: 6, spread: 0.036,
+    damageScale: 0.21, burstDuration: 0.32, burstRest: 0.9, spread: 0.036,
     fireRange: 520, aimCone: 0.19, assistCone: 0.19,
     reinforcementLimit: 4,
   }),
   ace: Object.freeze({
     id: 'ace', title: '王牌', label: '王牌',
     enemyHealth: 84, enemySpeed: 95, turnRate: 1.18,
-    shotInterval: 0.32, damage: 8, spread: 0.018,
+    damageScale: 0.33, burstDuration: 0.5, burstRest: 0.55, spread: 0.018,
     fireRange: 620, aimCone: 0.21, assistCone: 0.12,
     reinforcementLimit: 5,
   }),
@@ -44,11 +47,10 @@ export const DIFFICULTIES = Object.freeze({
 const TAU = Math.PI * 2;
 const PLAYER_HEALTH = 100;
 const PLAYER_RADIUS = 10;
-const GUN_INTERVAL = 0.12;
-const SHOT_SPEED = 640;
-const SHOT_DAMAGE = 12;
 const MAX_STEP = 1 / 120;
 const MAX_FRAME = 0.1;
+const INGRESS_SPEED_MULTIPLIER = 1.45;
+const INGRESS_WARNING_SECONDS = 1.25;
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 const finite = (n, fallback) => Number.isFinite(n) ? n : fallback;
 const wrapAngle = (a) => ((a + Math.PI) % TAU + TAU) % TAU - Math.PI;
@@ -114,9 +116,11 @@ export function createCombat(options = {}) {
   const difficultyId = Object.hasOwn(DIFFICULTIES, options.difficulty) ? options.difficulty : 'rookie';
   const mission = MISSIONS[missionId];
   const difficulty = DIFFICULTIES[difficultyId];
+  const playerSpec = getAircraftSpec(faction === 'raf' ? 'spitfire' : 'bf109');
+  const enemySpec = getAircraftSpec(enemyFaction === 'raf' ? 'spitfire' : 'bf109');
   const seed = finite(options.seed, 7) >>> 0;
   const state = {};
-  let random, serial, initialized, previousPose, playerCooldown, ramCooldown, waveStartedAt;
+  let random, serial, initialized, previousPose, playerGuns, ramCooldown, waveStartedAt;
 
   function emit(type, details = {}) {
     state.events.push({ type, time: state.elapsed, ...details });
@@ -134,7 +138,7 @@ export function createCombat(options = {}) {
     serial = 0;
     initialized = false;
     previousPose = null;
-    playerCooldown = 0;
+    playerGuns = createGunStates(playerSpec);
     ramCooldown = 0;
     waveStartedAt = 0;
     Object.assign(state, {
@@ -144,13 +148,42 @@ export function createCombat(options = {}) {
       targetKills: mission.targetKills, duration: mission.duration,
       score: 0, enemies: [], projectiles: [], effects: [], events: [],
       player: {
-        health: PLAYER_HEALTH, maxHealth: PLAYER_HEALTH,
+        health: PLAYER_HEALTH, maxHealth: PLAYER_HEALTH, aircraftId: playerSpec.id,
         kills: 0, shots: 0, hits: 0, heat: 0, overheated: false,
+        machineGunShots: 0, cannonShots: 0,
         invulnerable: true, invulnerableUntil: 3, lastHitAt: -1,
       },
     });
     if (pose) initialize(pose);
     return state;
+  }
+
+  function currentView(pose) {
+    const live = typeof options.getView === 'function' ? options.getView() : null;
+    if (live && live.width > 0 && live.height > 0 && typeof live.project === 'function') return live;
+    // A deterministic overhead viewport keeps simulation-only consumers useful;
+    // the application supplies its actual, current camera projection instead.
+    const c = Math.cos(pose.yaw), s = Math.sin(pose.yaw);
+    return {
+      width: 520, height: 340,
+      project(x, y, z) {
+        const dx = shortestOffset(x - pose.x), dy = shortestOffset(y - pose.y);
+        const px = 260 + dx * c + dy * s;
+        const py = 170 - dx * s + dy * c - (z - pose.z);
+        return { x: px, y: py, scale: 1, visible: px >= 0 && px < 520 && py >= 0 && py < 340 };
+      },
+    };
+  }
+
+  function aircraftViewRadius(spec) {
+    const d = spec.dimensions;
+    return Math.hypot(d.wingspanMetres, d.lengthMetres) * spec.unitsPerMetre * spec.modelScale / 2 + 5;
+  }
+
+  function touchesView(point, radius, view) {
+    if (!point || !Number.isFinite(point.x + point.y + point.scale) || point.scale <= 0) return false;
+    const r = radius * point.scale;
+    return point.x + r >= 0 && point.y + r >= 0 && point.x - r < view.width && point.y - r < view.height;
   }
 
   function spawnWave(pose) {
@@ -165,31 +198,50 @@ export function createCombat(options = {}) {
       : requested || 0;
     const fx = Math.sin(pose.yaw), fy = -Math.cos(pose.yaw);
     const rx = Math.cos(pose.yaw), ry = Math.sin(pose.yaw);
+    const view = currentView(pose);
+    const bodyRadius = aircraftViewRadius(enemySpec);
     for (let i = 0; i < count; i += 1) {
-      // The overhead renderer maps roughly one world unit to one logical pixel.
-      // Keep the first contact close enough to enter a 200px-tall landscape
-      // viewport promptly, rather than announcing opponents beyond the screen.
-      const ahead = (state.wave === 1 ? 88 : 96) + i * 14 + random() * 8;
-      const across = (i - (count - 1) / 2) * 34 + (random() - 0.5) * 12;
+      const across = (i - (count - 1) / 2) * 47 + (random() - 0.5) * 12;
+      const altitude = clamp(pose.z + (random() - 0.5) * 12, 50, 320);
       const speed = difficulty.enemySpeed * (0.94 + random() * 0.12);
+      let ahead = 40;
+      let position;
+      // Locate the current projected edge, not a fixed world distance that is
+      // visible on a different screen. Every part of the model starts offscreen.
+      do {
+        position = { x: pose.x + fx * ahead + rx * across, y: pose.y + fy * ahead + ry * across, z: altitude };
+        if (!touchesView(view.project(position.x, position.y, position.z), bodyRadius, view)) break;
+        ahead += 16;
+      } while (ahead < WORLD_SIZE * 0.45);
+      // Both aircraft are approaching this edge. A fixed 80-unit margin gave
+      // less than half a second of warning, even with correct offscreen birth.
+      // Reserve approach time and allow the follow camera to settle ahead of
+      // the player; the same real flight path then carries the model into view.
+      const closingSpeed = pose.speed + speed * INGRESS_SPEED_MULTIPLIER;
+      ahead += closingSpeed * INGRESS_WARNING_SECONDS + 32 + i * 22;
+      position = { x: pose.x + fx * ahead + rx * across, y: pose.y + fy * ahead + ry * across, z: altitude };
+      const projectedSpawn = view.project(position.x, position.y, position.z);
       state.enemies.push({
         id: `enemy-${++serial}`, faction: enemyFaction,
-        modelId: enemyFaction === 'raf' ? 'spitfire' : 'bf109',
-        x: pose.x + fx * ahead + rx * across,
-        y: pose.y + fy * ahead + ry * across,
-        z: clamp(pose.z + (random() - 0.5) * 12, 50, 320),
-        yaw: pose.yaw + (random() - 0.5) * 0.08,
+        modelId: enemySpec.id,
+        ...position,
+        yaw: Math.atan2(pose.x - position.x, -(pose.y - position.y)),
         pitch: 0, roll: 0, speed, baseSpeed: speed,
         health: difficulty.enemyHealth, maxHealth: difficulty.enemyHealth,
-        radius: 11, aiMode: 'approach', age: 0,
+        radius: 11, aiMode: 'ingress', age: 0, viewRadius: bodyRadius,
+        enteredAt: null, spawnX: position.x, spawnY: position.y, spawnZ: position.z,
+        // Historical birth projection for read-only review. radius is in world
+        // units; multiply it by scale to obtain the conservative screen radius.
+        spawnProjection: Object.freeze({ x: projectedSpawn.x, y: projectedSpawn.y, scale: projectedSpawn.scale,
+          width: view.width, height: view.height, radius: bodyRadius }),
         fireCooldown: 0.5 + random() * 0.7,
-        entryUntil: state.elapsed + 3.5 + i * 0.35,
+        entryUntil: Infinity, guns: createGunStates(enemySpec), burstUntil: 0,
         breakUntil: 0, nextDecision: state.elapsed + 4 + random(),
         evadeSign: random() < 0.5 ? -1 : 1,
         lastHitAt: -10, altitudeOffset: (random() - 0.5) * 10,
       });
     }
-    emit('wave', { wave: state.wave, count });
+    emit('wave', { wave: state.wave, count, incoming: true });
   }
 
   function initialize(pose) {
@@ -200,24 +252,36 @@ export function createCombat(options = {}) {
     return state;
   }
 
-  function projectile(owner, shotFaction, origin, target, speed, damage, ttl) {
+  function projectile(owner, shotFaction, origin, target, ballistics, mount, gun) {
     const dx = target.x - origin.x, dy = target.y - origin.y, dz = target.z - origin.z;
     const length = Math.hypot(dx, dy, dz) || 1;
     state.projectiles.push({
       id: `shot-${++serial}`, owner, faction: shotFaction,
       x: origin.x, y: origin.y, z: origin.z,
       prevX: origin.x, prevY: origin.y, prevZ: origin.z,
-      vx: dx / length * speed, vy: dy / length * speed, vz: dz / length * speed,
-      ttl, age: 0, damage, radius: 1.3,
+      vx: dx / length * ballistics.speed, vy: dy / length * ballistics.speed, vz: dz / length * ballistics.speed,
+      ttl: ballistics.ttl, age: 0, damage: ballistics.damage, radius: ballistics.radius,
+      kind: mount.kind, calibreMm: mount.calibreMm, mountId: mount.id,
+      originX: origin.x, originY: origin.y, originZ: origin.z,
+      // All bullets remain in the collision simulation; only periodic rounds
+      // carry a bright trace. The first round of every barrel is visible.
+      tracer: gun.fired === 0 || (gun.fired + gun.index) % ballistics.tracerEvery === 0,
+    });
+    gun.fired += 1;
+    state.effects.push({
+      id: `muzzle-${++serial}`, type: 'muzzle', owner, faction: shotFaction,
+      mountId: mount.id, kind: mount.kind, x: origin.x, y: origin.y, z: origin.z,
+      age: 0, life: mount.kind === 'cannon' ? 0.06 : 0.038,
+      ttl: mount.kind === 'cannon' ? 0.06 : 0.038, radius: mount.kind === 'cannon' ? 2.1 : 1.15,
     });
   }
 
-  function playerAim(pose) {
+  function playerAim(pose, shotSpeed) {
     const cp = Math.cos(pose.pitch);
     let point = {
-      x: pose.x + Math.sin(pose.yaw) * cp * 600,
-      y: pose.y - Math.cos(pose.yaw) * cp * 600,
-      z: pose.z + Math.sin(pose.pitch) * 600,
+      x: pose.x + Math.sin(pose.yaw) * cp * CONVERGENCE_DISTANCE,
+      y: pose.y - Math.cos(pose.yaw) * cp * CONVERGENCE_DISTANCE,
+      z: pose.z + Math.sin(pose.pitch) * CONVERGENCE_DISTANCE,
     };
     let best = Infinity;
     for (const enemy of state.enemies) {
@@ -231,7 +295,7 @@ export function createCombat(options = {}) {
         const rank = error * 600 + horizontal * 0.1;
         if (rank < best) {
           best = rank;
-          const lead = horizontal / (SHOT_SPEED + pose.speed);
+          const lead = horizontal / shotSpeed;
           point = {
             x: pose.x + dx + Math.sin(enemy.yaw) * enemy.speed * lead,
             y: pose.y + dy - Math.cos(enemy.yaw) * enemy.speed * lead,
@@ -245,25 +309,38 @@ export function createCombat(options = {}) {
 
   function updatePlayerGun(dt, pose, firing) {
     const player = state.player;
-    playerCooldown = Math.max(0, playerCooldown - dt);
+    for (const gun of playerGuns) gun.cooldown -= dt;
     if (!firing || player.overheated) player.heat = Math.max(0, player.heat - dt * 0.29);
     if (player.overheated && player.heat <= 0.28) {
       player.overheated = false;
       emit('gun-ready');
     }
-    if (!firing || player.overheated || playerCooldown > 0) return;
-    const target = playerAim(pose);
-    const fx = Math.sin(pose.yaw), fy = -Math.cos(pose.yaw);
-    const rx = Math.cos(pose.yaw), ry = Math.sin(pose.yaw);
-    for (const side of [-1, 1]) {
-      const origin = { x: pose.x + fx * 14 + rx * side * 3.4,
-        y: pose.y + fy * 14 + ry * side * 3.4, z: pose.z + 0.5 };
-      projectile('player', faction, origin, target, SHOT_SPEED + pose.speed, SHOT_DAMAGE, 1.35);
+    if (!firing || player.overheated) {
+      for (const gun of playerGuns) gun.cooldown = Math.max(0, gun.cooldown);
+      return;
     }
-    player.shots += 2;
-    player.heat = Math.min(1, player.heat + 0.047);
-    playerCooldown = GUN_INTERVAL;
-    emit('player-fire', { x: pose.x, y: pose.y, z: pose.z });
+    let shots = 0;
+    for (let i = 0; i < playerGuns.length; i++) {
+      const gun = playerGuns[i], mount = playerSpec.gunMounts[i];
+      if (gun.cooldown > 0) continue;
+      const ballistics = gameBallistics(mount, pose.speed, 'player', difficulty.damageScale);
+      const origin = muzzleWorldPosition(pose, mount, playerSpec.modelScale);
+      const target = playerAim(pose, ballistics.speed);
+      // A little dispersion preserves separate physical streams rather than a
+      // perfect bright line. Convergence is through a common forward aim point.
+      const spread = mount.kind === 'cannon' ? 1.5 : 1.1;
+      target.x += (random() - 0.5) * spread;
+      target.y += (random() - 0.5) * spread;
+      target.z += (random() - 0.5) * spread * 0.5;
+      projectile('player', faction, origin, target, ballistics, mount, gun);
+      gun.cooldown += ballistics.interval;
+      player.shots += 1;
+      if (mount.kind === 'cannon') player.cannonShots += 1;
+      else player.machineGunShots += 1;
+      shots++;
+    }
+    player.heat = Math.min(1, player.heat + dt * 0.39);
+    if (shots) emit('player-fire', { x: pose.x, y: pose.y, z: pose.z, shots, aircraftId: playerSpec.id });
     if (player.heat >= 1) {
       player.overheated = true;
       emit('overheat');
@@ -277,18 +354,31 @@ export function createCombat(options = {}) {
     enemy.y = pose.y + shortestOffset(enemy.y - pose.y);
     const dx = pose.x - enemy.x, dy = pose.y - enemy.y;
     const distance = Math.hypot(dx, dy);
-    if (state.elapsed > enemy.entryUntil && state.elapsed >= enemy.nextDecision) {
+    if (enemy.enteredAt === null) {
+      const point = currentView(pose).project(enemy.x, enemy.y, enemy.z);
+      if (point.visible) {
+        enemy.enteredAt = state.elapsed;
+        enemy.entryUntil = state.elapsed + 0.65;
+        emit('enemy-entered', { enemyId: enemy.id, wave: state.wave });
+      }
+    }
+    if (enemy.enteredAt !== null && state.elapsed > enemy.entryUntil
+      && (state.elapsed >= enemy.nextDecision || (distance < 105 && state.elapsed >= enemy.breakUntil))) {
       enemy.nextDecision = state.elapsed + 0.8 + random() * 0.5;
       const threatened = state.elapsed - enemy.lastHitAt < 1.1;
-      if (distance < 85 || threatened) {
+      if (distance < 105 || threatened) {
         enemy.breakUntil = state.elapsed + 1.1 + random() * 0.8;
         enemy.evadeSign = random() < 0.5 ? -1 : 1;
       }
     }
     let desiredYaw;
-    if (state.elapsed < enemy.entryUntil) {
-      enemy.aiMode = 'approach';
-      desiredYaw = enemy.yaw;
+    if (enemy.enteredAt === null || state.elapsed < enemy.entryUntil) {
+      enemy.aiMode = 'ingress';
+      // Fly an intercept from outside the screen. No distance correction or
+      // teleport is performed when an aircraft crosses into the view.
+      const lead = clamp(distance / (enemy.baseSpeed + pose.speed), 0, 0.8);
+      desiredYaw = Math.atan2(dx + Math.sin(pose.yaw) * pose.speed * lead,
+        -(dy - Math.cos(pose.yaw) * pose.speed * lead));
     } else if (state.elapsed < enemy.breakUntil) {
       enemy.aiMode = 'evade';
       desiredYaw = Math.atan2(dx, -dy) + enemy.evadeSign * 1.45;
@@ -308,30 +398,48 @@ export function createCombat(options = {}) {
     enemy.pitch = Math.atan2(climb, enemy.speed);
     // Close all the way into gun range. Boosting only beyond the render horizon
     // would strand a slower pursuer at that threshold forever.
-    const catchUp = enemy.aiMode === 'approach' ? 1 : distance > 350 ? 1.35 : distance > 200 ? 1.16 : 1;
+    const catchUp = enemy.aiMode === 'ingress' ? INGRESS_SPEED_MULTIPLIER : distance > 350 ? 1.45 : distance > 200 ? 1.22 : 1;
     enemy.speed = enemy.baseSpeed * Math.max(catchUp, enemy.aiMode === 'evade' ? 1.08 : 1);
     enemy.x += Math.sin(enemy.yaw) * enemy.speed * dt;
     enemy.y -= Math.cos(enemy.yaw) * enemy.speed * dt;
     enemy.fireCooldown = Math.max(0, enemy.fireCooldown - dt);
+    for (const gun of enemy.guns) gun.cooldown -= dt;
     const bearing = Math.atan2(pose.x - enemy.x, -(pose.y - enemy.y));
     const facing = Math.abs(wrapAngle(bearing - enemy.yaw));
-    if (state.elapsed < 6 || enemy.age < 2 || enemy.aiMode !== 'attack' || enemy.fireCooldown > 0
-      || distance < 60 || distance > difficulty.fireRange || facing > difficulty.aimCone) return;
-    const bulletSpeed = 520 + enemy.speed;
-    const leadTime = distance / bulletSpeed;
-    const spread = difficulty.spread * distance;
-    const target = {
-      x: pose.x + Math.sin(pose.yaw) * pose.speed * leadTime + (random() - 0.5) * spread * 2,
-      y: pose.y - Math.cos(pose.yaw) * pose.speed * leadTime + (random() - 0.5) * spread * 2,
-      z: pose.z + Math.sin(pose.pitch) * pose.speed * leadTime + (random() - 0.5) * spread,
-    };
-    projectile(enemy.id, enemy.faction, {
-      x: enemy.x + Math.sin(enemy.yaw) * 14,
-      y: enemy.y - Math.cos(enemy.yaw) * 14,
-      z: enemy.z,
-    }, target, bulletSpeed, difficulty.damage, 1.2);
-    enemy.fireCooldown = difficulty.shotInterval * (0.85 + random() * 0.4);
-    emit('enemy-fire', { enemyId: enemy.id, x: enemy.x, y: enemy.y, z: enemy.z });
+    const canAim = state.elapsed >= 6 && enemy.age >= 2 && enemy.aiMode === 'attack'
+      && distance >= 60 && distance <= difficulty.fireRange && facing <= difficulty.aimCone;
+    if (!canAim) {
+      enemy.burstUntil = 0;
+      for (const gun of enemy.guns) gun.cooldown = Math.max(0, gun.cooldown);
+      return;
+    }
+    if (state.elapsed >= enemy.burstUntil) {
+      if (enemy.fireCooldown > 0) {
+        for (const gun of enemy.guns) gun.cooldown = Math.max(0, gun.cooldown);
+        return;
+      }
+      const burst = difficulty.burstDuration;
+      enemy.burstUntil = state.elapsed + burst;
+      enemy.fireCooldown = burst + difficulty.burstRest + random() * 0.3;
+    }
+    const spec = getAircraftSpec(enemy.modelId);
+    let shots = 0;
+    for (let i = 0; i < enemy.guns.length; i++) {
+      const gun = enemy.guns[i], mount = spec.gunMounts[i];
+      if (gun.cooldown > 0) continue;
+      const ballistics = gameBallistics(mount, enemy.speed, enemy.id, difficulty.damageScale);
+      const leadTime = distance / ballistics.speed;
+      const spread = difficulty.spread * distance;
+      const target = {
+        x: pose.x + Math.sin(pose.yaw) * pose.speed * leadTime + (random() - 0.5) * spread * 2,
+        y: pose.y - Math.cos(pose.yaw) * pose.speed * leadTime + (random() - 0.5) * spread * 2,
+        z: pose.z + Math.sin(pose.pitch) * pose.speed * leadTime + (random() - 0.5) * spread,
+      };
+      projectile(enemy.id, enemy.faction, muzzleWorldPosition(enemy, mount, spec.modelScale), target, ballistics, mount, gun);
+      gun.cooldown += ballistics.interval;
+      shots++;
+    }
+    if (shots) emit('enemy-fire', { enemyId: enemy.id, x: enemy.x, y: enemy.y, z: enemy.z, shots, aircraftId: spec.id });
   }
 
   function destroyEnemy(enemy) {

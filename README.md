@@ -6,7 +6,7 @@ This repository preserves Dash's Fly demonstration and adds an original, playabl
 
 [打开开发试玩](https://airplanes-skies-1940.kenneth42.chatgpt.site)（当前仅项目所有者可访问）。
 
-## 当前版本：0.1.0
+## 当前版本：0.2.0
 
 ### 净空体验
 
@@ -19,15 +19,18 @@ This repository preserves Dash's Fly demonstration and adds an original, playabl
 ### 1940 · 海峡空战
 
 - 单人对 AI，可选 RAF / Luftwaffe 阵营。
-- 原创程序化像素 **Spitfire** 与 **Bf 109**，不同机体轮廓、机翼、螺旋桨与识别标记。
+- 按 1940 年型号重做的程序化像素 **Spitfire Mk Ia** 与 **Bf 109 E-4**：椭圆翼与梯形翼、座舱、尾翼、散热器和机体比例分别建模。
 - 每型四款皮肤，共八款；阵营、涂装、任务、难度与最佳成绩保存在浏览器本地。
 - 三个可完成的任务：海峡巡逻（三波六击落）、自由猎杀（三波八击落）、守住长空（180 秒）。
 - 初次出击 / 王牌两种难度；AI 接敌、追击、规避、射击、脱离与增援。
-- 双翼机枪、轻度辅助瞄准、连续弹道碰撞、机枪过热、受伤、击落、爆炸、雷达、结算和重开。
+- 喷火式八挺 .303 Browning（每翼四挺）；Bf 109 E-4 两挺机鼻 MG 17 加两门翼装 MG FF/M 20 mm 机炮。独立枪口、射速与间隔曳光弹，所有实弹均参与连续碰撞检测。
+- 三叶螺旋桨绕真实机轴转动，共用机体姿态与深度遮挡；二战模式无喷气尾焰，切换模式时清除旧火焰缓冲。
+- 敌机在实际相机画面外生成，从远处连续飞入；雷达提前提示，不在画面中心刷新。
+- 轻度辅助瞄准、武器过热、受伤、击落、爆炸、雷达、结算和重开。
 - 首版战斗采用俯视视角；净空体验保留三视角。
 - 桌面键鼠、手机摇杆与射击/加速按钮；暂停、离开页面自动暂停；可选程序生成音效。
 
-这是历史风格的街机玩法，任务为虚构情景、涂装为艺术演绎。当前不包含联网多人、精确飞行性能模拟、真实英吉利海峡地形或正式战役还原。
+机型尺寸、三叶桨与武器布局有明确参考，见 [机型参考与建模边界](docs/AIRCRAFT_REFERENCE.md)。像素模型仍是按参考制作的低分辨率近似，不是扫描模型。玩法为街机设定，任务为虚构情景；每型包含历史风格及明确标注的创意涂装。当前不包含联网多人、精确飞行性能模拟、真实英吉利海峡地形或正式战役还原。
 
 ## 本地运行
 
@@ -75,7 +78,10 @@ index.html                   版本入口、机库、飞行界面
 src/app.js                   输入、画布、界面与生命周期集成
 src/engine/                  迁移的原版软件渲染器及外部体素桥接
 src/game/combat.js           独立、可测试的战斗模拟
-src/game/aircraft.js         原创二战飞机与涂装
+src/game/aircraft.js         两种二战飞机的独立几何与涂装
+src/game/aircraft-specs.js   型号、尺寸、螺旋桨与武器安装点
+src/game/ordnance.js         共用枪口变换与街机弹道参数
+src/engine/propeller.js      三叶桨几何与时间驱动旋转
 src/game/audio.js            程序音效
 src/game/preferences.js      本地选择与成绩
 vendor/upstream/fly-v35/     原始快照与清单
@@ -108,4 +114,4 @@ npm run test:browser
 
 ## 继续研发
 
-请先阅读 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。当前首版可实际游玩；后续优先实机手感、像素机型精修、关卡与地形扩展，再评估战斗追尾视角和多人服务。不要把后续候选功能表述为已交付。
+请先阅读 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。当前版本可实际游玩；后续优先实机手感、机体受损效果、关卡与地形扩展，再评估战斗追尾视角和多人服务。不要把后续候选功能表述为已交付。

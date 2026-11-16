@@ -33,6 +33,6 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: success()
         with:
-          name: airplanes-static-v0.1.0
+          name: airplanes-static-v0.2.0
           path: dist/
           retention-days: 30

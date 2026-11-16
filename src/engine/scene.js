@@ -1121,7 +1121,7 @@ export function createScene(initial, options = {}) {
     // a little dark smoke off the end of each flame, left hanging in the air behind the jet
     smokeClock += dt
     const every = 0.034 - 0.012 * boost
-    if (smokeClock >= every && burn > 0.6 && p.afterburner > 0.05 && spreadNow < 2) {
+    if (!hidePlayer && smokeClock >= every && burn > 0.6 && p.afterburner > 0.05 && spreadNow < 2) {
       smokeClock = 0
       const len = flameLength()
       const sc = jetSize()

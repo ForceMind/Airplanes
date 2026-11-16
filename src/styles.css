@@ -15,3 +15,20 @@ dialog{border:1px solid #dfceaa50;background:#152330;color:var(--paper);padding:
 @media(max-width:600px),(any-pointer:coarse){.touch-controls{display:block}.desktop-hint{display:none}.touch-controls .touch-button:active{background:#d8bf8c;color:#152936}}
 @media(max-height:520px) and (orientation:landscape){.game-topbar{top:9px;left:15px;right:15px}.status-strip{top:59px;left:15px;right:auto}.mission-hud{top:59px;right:15px}.combat-hud>canvas{width:86px;height:86px;bottom:95px;right:16px}.touch-controls{height:145px}.joystick{width:90px;height:90px;left:22px;bottom:29px}.touch-actions{bottom:28px;right:22px}.fire-button{width:64px;height:64px}.touch-button{width:48px;height:48px}.flight-instruments{bottom:10px;left:140px}.free-toolbar{top:58px;bottom:auto}.combat-message{top:43%;font-size:14px}.modal-card{padding:20px;width:370px}.modal-card h2{font-size:23px;margin:8px 0}.modal-card p{margin-bottom:10px}.result-stats{padding:10px 0;margin:10px 0}.result-stats b{font-size:20px}.modal-card>.button{padding:10px;min-height:38px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}}
+
+/* Aircraft identification and weapon inspection */
+.preview-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:12px}
+.hardpoint-button{border:1px solid var(--line);height:40px;padding:0 11px;font-size:10px;white-space:nowrap;color:var(--muted)}
+.hardpoint-button[aria-pressed=true]{border-color:var(--gold);color:var(--gold);background:#e5c58c0a}
+.aircraft-caption h2{font-size:clamp(20px,2.1vw,28px)}
+.aircraft-specs{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);padding-top:18px;margin:22px 0 0;gap:12px}
+.aircraft-specs dt,.aircraft-armament>span{font-size:9px;color:var(--muted);letter-spacing:1px}
+.aircraft-specs dd{font:14px var(--mono);margin:8px 0 0;color:var(--paper)}
+.aircraft-specs>div:last-child dd{font:12px var(--sans)}
+.aircraft-armament{display:flex;align-items:center;gap:18px;margin-top:20px;font-size:11px;line-height:1.7}
+.aircraft-armament b{font-weight:400;color:var(--gold)}
+.hardpoint-legend{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:9px;color:var(--muted);margin-top:15px;line-height:1.6}
+.hardpoint-legend>span{display:flex;align-items:center;gap:6px}.hardpoint-legend i{width:6px;height:6px;border-radius:50%;display:inline-block}.mg-dot{background:#f5d47e}.cannon-dot{background:#f69761}.hardpoint-legend small{font-size:9px;color:#7c919e}
+.weapon-hud{position:absolute;top:147px;left:25px;font:9px var(--mono);letter-spacing:.5px;color:#f1dfb5;text-shadow:0 1px 5px #101d29;background:#101d2977;padding:5px 8px}
+@media(max-width:600px){.aircraft-caption h2{font-size:21px}.preview-actions{gap:5px;margin-left:8px}.hardpoint-button{font-size:9px;padding:0 8px}.preview-actions .icon-button{width:34px}.aircraft-armament{gap:14px;font-size:10px}.aircraft-specs dd{font-size:13px}.weapon-hud{top:120px;left:13px;max-width:calc(100% - 26px);font-size:8px;padding:2px 5px}.mission-hud{top:147px}.combat-message{top:33%}}
+@media(max-height:520px) and (orientation:landscape){.weapon-hud{top:121px;left:16px;font-size:8px}.mission-hud{top:59px}}
