@@ -44,12 +44,14 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
           retention-days: 14
-      - name: Commit tested integration to dev only
+      - name: Commit tested game sources to dev only
         if: success()
         run: |
-          rm -rf .integration
-          rm -f .github/workflows/upstream-capture.yml .github/workflows/forge-inspect.yml .github/workflows/v03-integration.yml
-          git add README.md THIRD_PARTY_NOTICES.md docs index.html package.json package-lock.json src scripts tests modern vendor/upstream/fighter-guns-v9 .github/workflows
+          # This token can write game contents, not workflows. Keep every
+          # workflow unchanged; the connected maintainer handles cleanup.
+          git restore --source=HEAD --staged --worktree .github/workflows
+          git rm -r .integration
+          git add README.md THIRD_PARTY_NOTICES.md docs index.html package.json package-lock.json src scripts tests modern vendor/upstream/fighter-guns-v9
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Integrate local Fighter + Guns v9 and enable WWII three-view combat'
