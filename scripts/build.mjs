@@ -1,11 +1,13 @@
 import { mkdir, rm, cp, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { importModern } from './import-modern.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const dist = resolve(root, 'dist');
+await importModern(root);
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
-for (const file of ['index.html', 'src', 'assets', 'THIRD_PARTY_NOTICES.md']) {
+for (const file of ['index.html', 'src', 'assets', 'modern', 'THIRD_PARTY_NOTICES.md']) {
   await cp(resolve(root, file), resolve(dist, file), { recursive: true });
 }
 await mkdir(resolve(dist, 'docs'), { recursive: true });

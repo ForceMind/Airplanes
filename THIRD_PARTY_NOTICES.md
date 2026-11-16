@@ -28,3 +28,11 @@ Aircraft silhouettes, liveries and missions are stylized historical-inspired gam
 ## Development dependencies
 
 Playwright is used for development and browser verification only. It is not shipped as a runtime dependency of the built game. Its upstream license and notices remain included in the installed package.
+
+## Fighter + Guns v9 combat fork
+
+The user-selected public build at https://2kp1v13.sharehtml.org/ is preserved byte-for-byte in `vendor/upstream/fighter-guns-v9/index.html`. Its title explicitly calls it a combat fork of Dash's jet game and retains attribution to Dash / @creativedash. We have not identified the combat-fork author's name or found a standard license covering this game's source. Public availability is not represented as a broad MIT/Apache redistribution grant. Obtain appropriate permission before commercial redistribution; Airplanes does not claim this combat implementation as its original work.
+
+`modern/index.html` is a deterministically adapted local runtime. `scripts/import-modern.mjs` records its narrowly scoped camera hook, storage namespace, content-security policy and lifecycle bridge. Native gameplay, skill tree, achievements, save slots and camera implementation remain upstream code. Existing bundled React, react-dom and scheduler license notices are preserved in both snapshot and runtime. Their dependency licenses do not establish the license of the game itself.
+
+The separately supplied Forge URL `https://forge.ui8.ai/share/frag_2a9b059a-aeb6-4aea-a447-668efb59bd3e` returned only the platform shell during acquisition. Its relationship to the ShareHTML build is unverified; no claim that this second project's source was imported is made.

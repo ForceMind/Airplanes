@@ -1986,6 +1986,8 @@ export function createScene(initial, options = {}) {
   }
   const blips = []
   function drawCockpitView() {
+    // External piston aircraft provide their own panel; never reuse the modern jet cockpit.
+    if (hidePlayer) return
     const lead = jets[0]
     // the panel and the hoop slide into place over the later part of the move
     const inPlace = cockpitIn()
@@ -2110,6 +2112,7 @@ export function createScene(initial, options = {}) {
       }
       drawCockpitView()
     }
+    actorDepth.fill(Infinity)
     hasRendered = true
     return bytes
   }
@@ -2150,15 +2153,17 @@ export function createScene(initial, options = {}) {
       const sx = Math.floor(half + c * dx - s * dy + 0.5)
       const sy = Math.floor(half + s * dx + c * dy + 0.5)
       if (sx < 0 || sy < 0 || sx >= sheetSide || sy >= sheetSide) return false
-      return sheetZ[sy * sheetSide + sx] >= depth - 1
+      return sheetZ[sy * sheetSide + sx] >= depth - 1 && actorDepth[y * W + x] >= depth - 1
     }
-    return zbuf[y * W + x] >= depth - 1
+    return zbuf[y * W + x] >= depth - 1 && actorDepth[y * W + x] >= depth - 1
   }
 
-  /** Battle v1 uses overhead view. Paint all actors in one call before putImageData. */
+  /** External airframes use the native camera, including rolled-sheet depth in the cockpit. */
   function drawActors(actors) {
-    if (!hasRendered || viewTarget !== 0 || vC > 0.001 || vK > 0.001) return bytes
-    drawVoxelActors(actors, {
+    if (!hasRendered) return bytes
+    const visibleActors = (Array.isArray(actors) ? actors : []).map(actor => actor.isPlayer
+      ? { ...actor, opacity: jetFade * (actor.opacity ?? 1) } : actor)
+    drawVoxelActors(visibleActors, {
       width: W, height: H, pixels: fb, depth: actorDepth,
       project: projectPoint, visible: isPointVisible,
     })
@@ -2178,6 +2183,8 @@ export function createScene(initial, options = {}) {
     step,
     render,
     getFlightState,
+    getCameraState: () => ({ view: viewTarget === 2 ? 'cockpit' : viewTarget === 1 ? 'chase' : 'top',
+      cockpitOpacity: cockpitIn(), playerOpacity: jetFade, roll: vRoll }),
     projectPoint,
     isPointVisible,
     drawActors,

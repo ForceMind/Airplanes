@@ -306,7 +306,7 @@ async function checkDesktop(url) {
   await desktop.goto(url, { waitUntil: 'domcontentloaded' });
   await visible(desktop, '#home-screen');
   await waitMode(desktop, 'home');
-  assert.equal(await desktop.locator('.version-card').count(), 2, 'Two game versions are available');
+  assert.equal(await desktop.locator('.version-card').count(), 3, 'Three game versions are available');
   assert.ok(await desktop.locator('#start-free').isVisible(), 'Original free-flight entry is visible');
   assert.ok(await desktop.locator('.battle-card a[href="#hangar"]').isVisible(), 'Combat hangar entry is visible');
   await noHorizontalOverflow(desktop, 'desktop home');
@@ -529,6 +529,112 @@ async function checkMobile(url) {
   mobile = undefined;
 }
 
+async function modernFrame(page) {
+  await page.waitForFunction(() => {
+    const section = document.querySelector('#modern-screen');
+    return section && !section.hidden && !section.querySelector('[data-modern="view"]').disabled;
+  }, null, { timeout: 60000 });
+  const frame = page.frames().find(f => f.url().includes('/modern/index.html'));
+  assert.ok(frame, 'Modern combat uses the local vendored page');
+  await frame.waitForFunction(() => typeof window.__view === 'function' && typeof window.__game === 'function');
+  return frame;
+}
+async function nativePixels(frame, label) {
+  const sample = await frame.locator('canvas[role="img"]').evaluate(canvas => {
+    const data = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+    const values = new Set();
+    for(let i=0;i<data.length;i+=Math.max(4,Math.floor(data.length/16000)*4)) values.add(`${data[i]},${data[i+1]},${data[i+2]}`);
+    return {width:canvas.width,height:canvas.height,colours:values.size};
+  });
+  assert.ok(sample.colours > 8 && sample.width > 32 && sample.height > 32, `${label}: populated native frame ${JSON.stringify(sample)}`);
+  report.canvasSamples.push({label,...sample});
+}
+async function checkBattleCameras(url) {
+  const context = await browser.newContext({viewport:{width:1280,height:800},locale:'zh-CN'});
+  desktop = await context.newPage(); monitor(desktop,'WWII-cameras');
+  await desktop.goto(url+'/#combat', {waitUntil:'domcontentloaded'}); await waitGame(desktop,'combat');
+  for(const view of ['chase','cockpit','top']) {
+    const before = await desktop.evaluate(() => ({time:window.__airplanesDebug.pose.time,shots:window.__airplanesDebug.state.player.shots}));
+    await desktop.keyboard.press('KeyV');
+    await desktop.waitForFunction(view => window.__airplanesDebug.view === view,view);
+    await desktop.waitForFunction(start => window.__airplanesDebug.pose.time >= start+1.55,before.time);
+    await verifyCanvas(desktop,'WWII/'+view); await verifyNoJetFlame(desktop,'WWII/'+view);
+    await desktop.keyboard.down('Space');
+    try { await desktop.waitForFunction(n => window.__airplanesDebug.state.player.shots>n,before.shots); }
+    finally {await desktop.keyboard.up('Space');}
+    assert.equal(await desktop.evaluate(() => window.__airplanesDebug.state.player.aircraftId),'spitfire');
+    await snapshot(desktop,`wwii-${view}-desktop`);
+  }
+  await leaveToHome(desktop);
+  report.checks.push('WWII: V cycles top/chase/cockpit with live combat, actual eight-gun fire, native terrain projection and no jet flames.');
+  await context.close(); desktop=undefined;
+}
+async function checkModern(url) {
+  const context = await browser.newContext({viewport:{width:1280,height:800},locale:'zh-CN'});
+  desktop=await context.newPage(); monitor(desktop,'modern-desktop');
+  const external=[];
+  desktop.on('request',request=>{if(/^https?:/.test(request.url())&&!request.url().startsWith(url+'/')) external.push(request.url());});
+  await desktop.goto(url,{waitUntil:'domcontentloaded'}); await desktop.locator('#start-modern').click();
+  let frame=await modernFrame(desktop);
+  assert.equal(await frame.evaluate(()=>window.__view()),'chase');
+  await frame.locator('#root > div').focus();
+  await desktop.keyboard.down('KeyF');
+  try {await frame.waitForFunction(()=>window.__game().started&&window.__game().heat>0&&window.__game().bullets>0);}
+  finally {await desktop.keyboard.up('KeyF');}
+  for(const view of ['cockpit','top','chase']) {
+    const time=await frame.evaluate(()=>window.__exportRun().run.time);
+    await desktop.keyboard.press('KeyV');
+    await frame.waitForFunction(view=>window.__view()===view,view);
+    await frame.waitForFunction(time=>window.__exportRun().run.time>time+1.6,time);
+    await nativePixels(frame,'modern/'+view);
+    await snapshot(desktop,`modern-${view}-desktop`);
+  }
+  const ammo=await frame.evaluate(()=>window.__game().ammo);
+  await desktop.keyboard.press('KeyR');
+  await frame.waitForFunction(before=>window.__game().ammo<before,ammo);
+  await desktop.keyboard.press('KeyP');
+  await frame.waitForFunction(()=>window.__paused());
+  const time=await frame.evaluate(()=>window.__exportRun().run.time); await delay(500);
+  assert.equal(await frame.evaluate(()=>window.__exportRun().run.time),time,'Native pause freezes combat');
+  await frame.locator('[data-pause="saves"]').click();
+  await frame.locator('[data-slot-save="0"]').click();
+  assert.ok(await frame.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('airplanes-modern-v9-')&&k.includes('slots'))),'Native save slots have an independent persistent namespace');
+  await snapshot(desktop,'modern-save-slots');
+  await frame.locator('[data-pause="back"]').click();
+  await frame.locator('[data-pause="achievements"]').click();
+  await snapshot(desktop,'modern-achievements');
+  await desktop.locator('#modern-screen a[href="#home"]').click();
+  await waitMode(desktop,'home');
+  await desktop.waitForFunction(()=>document.querySelector('#modern-screen iframe').getAttribute('src')==='about:blank');
+  await desktop.locator('#start-modern').click(); frame=await modernFrame(desktop);
+  assert.ok(await frame.evaluate(()=>Object.keys(localStorage).some(k=>k.includes('airplanes-modern-v9-')&&k.includes('slots'))),'Saved native run survives leaving and reopening');
+  await desktop.locator('[data-modern="view"]').click();
+  await frame.waitForFunction(()=>window.__view()==='cockpit');
+  assert.deepEqual(external,[],'Local modern mode loads without upstream, Forge or CDNs');
+  await desktop.locator('#modern-screen a[href="#home"]').click();
+  report.checks.push('Modern desktop: actual upstream game, native three views, gunfire, missile spending, pause, save slots, achievements, toolbar camera and unload/re-entry; no external requests.');
+  await context.close();desktop=undefined;
+
+  const touchContext=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,locale:'zh-CN'});
+  mobile=await touchContext.newPage();monitor(mobile,'modern-mobile');
+  const session=await touchContext.newCDPSession(mobile);
+  await session.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+  await mobile.goto(url+'/#modern',{waitUntil:'domcontentloaded'});frame=await modernFrame(mobile);
+  await frame.getByRole('button',{name:'Change view',exact:true}).tap();
+  await frame.waitForFunction(()=>window.__view()==='cockpit');
+  const box=await frame.getByRole('button',{name:'Guns: hold to fire',exact:true}).boundingBox();
+  assert.ok(box&&box.width>=30&&box.height>=30,'Native mobile gun button is reachable');
+  await session.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:box.x+box.width/2,y:box.y+box.height/2,id:0}]});
+  try{await frame.waitForFunction(()=>window.__game().started&&window.__game().heat>0);}
+  finally{await session.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});}
+  await nativePixels(frame,'modern/mobile-cockpit');
+  await noHorizontalOverflow(mobile,'modern/mobile');await snapshot(mobile,'modern-mobile');
+  await session.send('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+  await mobile.locator('#modern-screen a[href="#home"]').tap();await waitMode(mobile,'home');
+  report.checks.push('Modern mobile: original touch View and Guns controls, actual cockpit rendering, native fire and return to launcher.');
+  await session.detach();await touchContext.close();mobile=undefined;
+}
+
 try {
   await mkdir(output, { recursive: true });
   const url = await startServer();
@@ -539,6 +645,8 @@ try {
   });
   await checkDesktop(url);
   await checkMobile(url);
+  await checkBattleCameras(url);
+  await checkModern(url);
   assert.equal(report.pageErrors.length, 0, `Unhandled browser errors: ${JSON.stringify(report.pageErrors)}`);
   report.ok = true;
   console.log(`Browser smoke passed (${report.checks.length} scenario groups). Screenshots: test-results/`);

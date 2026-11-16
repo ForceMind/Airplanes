@@ -1,0 +1,16 @@
+{
+  "name": "Fighter + Guns v9",
+  "source": "https://2kp1v13.sharehtml.org/",
+  "originalAuthor": "Dash / @creativedash",
+  "combatForkAuthor": "Not identified by the supplied page",
+  "sourceSha256": "8c591be9712fafc9d842a508e6780981f08c2652669e00f6edbd772086cf5bb7",
+  "sourceBytes": 524270,
+  "runtimeSha256": "7cc95fc281a34d3139414bac7168b177f08bf5f34e54e29c7798c1a9ca6787b3",
+  "alterations": [
+    "One explicit native camera hook",
+    "Independent airplanes-modern-v9 storage namespace",
+    "Offline content security policy",
+    "Local lifecycle bridge"
+  ],
+  "license": "No standard license for the game was found; upstream notices and bundled dependency licenses are retained."
+}

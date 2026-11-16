@@ -62,6 +62,8 @@ export function drawVoxelActors(actors, target) {
   for (const actor of actors) {
     if (!actor?.model || !Array.isArray(actor.model.voxels)) continue;
     if (![actor.x, actor.y, actor.z].every(Number.isFinite)) continue;
+    const opacity = Number.isFinite(actor.opacity) ? Math.max(0, Math.min(1, actor.opacity)) : 1;
+    if (opacity < .004) continue;
     const scale = Number.isFinite(actor.scale) ? actor.scale : 1;
     if (scale <= 0) continue;
     const centre = project(actor.x, actor.y, actor.z);
@@ -105,24 +107,25 @@ export function drawVoxelActors(actors, target) {
         }
       }
     };
-    rasterize(actor.model.voxels);
+    rasterize(actor.model.voxels, Math.round(opacity * 255));
     if (propeller) {
       const spinning = actor.propellerRunning !== false && Number.isFinite(actor.time);
       const phase = Number.isFinite(actor.propellerPhase) ? actor.propellerPhase
         : spinning ? propellerPhase(actor.time, actor.speed, propeller) : .2;
-      rasterize(createPropellerVoxels(propeller, phase));
+      rasterize(createPropellerVoxels(propeller, phase), Math.round(opacity * 255));
       if (spinning && actor.propellerBlur !== false) blurPasses.push(() => {
         // A short shutter exposure softens strobing while keeping three actual
         // moving blades. Blur uses one sample per voxel and the completed depth
         // buffer, so a nose, wing or nearer aircraft still occludes it.
         const direction = propeller.rotationSign === 1 ? 1 : -1;
-        rasterize(createPropellerVoxels(propeller, phase - direction * .22), 44, 1);
-        rasterize(createPropellerVoxels(propeller, phase - direction * .44), 24, 1);
+        rasterize(createPropellerVoxels(propeller, phase - direction * .22), Math.round(44 * opacity), 1);
+        rasterize(createPropellerVoxels(propeller, phase - direction * .44), Math.round(24 * opacity), 1);
       });
     }
   }
   for (const drawBlur of blurPasses) drawBlur();
   if (blur) for (const at of blur.touched) {
+    if (depth[at] < blur.depths[at]) continue;
     const a = blur.alpha[at], b = 255 - a, src = blur.colors[at], dst = pixels[at];
     const red = Math.round(((src & 255) * a + (dst & 255) * b) / 255);
     const green = Math.round((((src >>> 8) & 255) * a + ((dst >>> 8) & 255) * b) / 255);

@@ -220,6 +220,16 @@ export function createCombat(options = {}) {
       const closingSpeed = pose.speed + speed * INGRESS_SPEED_MULTIPLIER;
       ahead += closingSpeed * INGRESS_WARNING_SECONDS + 32 + i * 22;
       position = { x: pose.x + fx * ahead + rx * across, y: pose.y + fy * ahead + ry * across, z: altitude };
+      if (view.view && view.view !== 'top') {
+        const side = i % 2 ? 1 : -1;
+        let candidate = null;
+        for (const distance of [360, 520, 700, 850]) {
+          const trial = { x: pose.x + fx * (80 + i * 25) + rx * side * distance,
+            y: pose.y + fy * (80 + i * 25) + ry * side * distance, z: altitude };
+          if (!touchesView(view.project(trial.x, trial.y, trial.z), bodyRadius, view)) { candidate = trial; break; }
+        }
+        if (candidate) position = candidate;
+      }
       const projectedSpawn = view.project(position.x, position.y, position.z);
       state.enemies.push({
         id: `enemy-${++serial}`, faction: enemyFaction,

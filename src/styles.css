@@ -32,3 +32,16 @@ dialog{border:1px solid #dfceaa50;background:#152330;color:var(--paper);padding:
 .weapon-hud{position:absolute;top:147px;left:25px;font:9px var(--mono);letter-spacing:.5px;color:#f1dfb5;text-shadow:0 1px 5px #101d29;background:#101d2977;padding:5px 8px}
 @media(max-width:600px){.aircraft-caption h2{font-size:21px}.preview-actions{gap:5px;margin-left:8px}.hardpoint-button{font-size:9px;padding:0 8px}.preview-actions .icon-button{width:34px}.aircraft-armament{gap:14px;font-size:10px}.aircraft-specs dd{font-size:13px}.weapon-hud{top:120px;left:13px;max-width:calc(100% - 26px);font-size:8px;padding:2px 5px}.mission-hud{top:147px}.combat-message{top:33%}}
 @media(max-height:520px) and (orientation:landscape){.weapon-hud{top:121px;left:16px;font-size:8px}.mission-hud{top:59px}}
+
+/* V0.3: three local flight modes. The upstream UI never escapes its own document. */
+.modern-screen{position:fixed;inset:0;background:#0b1220;z-index:11;display:flex;flex-direction:column;height:100dvh}
+.modern-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:6px max(12px,env(safe-area-inset-right)) 6px max(12px,env(safe-area-inset-left));background:#101a27;flex:none}
+.modern-toolbar strong{font-size:13px;font-weight:500}.modern-toolbar small{font:9px var(--mono);color:var(--muted);margin-left:12px}.modern-toolbar>div{display:flex;gap:6px}
+.modern-screen iframe{border:0;display:block;flex:1;width:100%;min-height:0;background:#0b1220}
+.modern-loading{position:absolute;top:50%;left:0;right:0;text-align:center;background:#101a27dd;padding:20px;pointer-events:none}
+.modern-art{background:radial-gradient(ellipse at 70% 20%,#5680a1,#29415d 60%,#172331)}.modern-silhouette{font-size:125px;position:absolute;left:26%;top:-10px;transform:rotate(-30deg);color:#d4e2e7;text-shadow:10px 16px 0 #0b1a3344}
+.combat-view-toolbar{top:70px;bottom:auto;z-index:3}.combat-view-toolbar .hud-button{background:#101d29d9}
+@media(min-width:1050px){.version-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.version-footer{flex-wrap:wrap}.version-footer .button{margin-left:auto}.version-body{padding:22px}.version-title h3{font-size:20px}}
+@media(max-width:1049px) and (min-width:601px){.modern-card{grid-column:span 2}.modern-card .version-art{height:190px}.modern-card .version-body p{min-height:0}}
+@media(max-width:600px){.modern-toolbar{min-height:50px;gap:5px;padding:5px 8px}.modern-toolbar small{display:none}.modern-toolbar strong{font-size:11px}.modern-toolbar .hud-button{font-size:10px;padding:7px;min-height:36px}.combat-view-toolbar{top:129px;left:12px;transform:none}.combat-view-toolbar .hud-button{font-size:10px}}
+@media(max-height:520px) and (orientation:landscape){.modern-toolbar{min-height:42px}.modern-toolbar .hud-button{min-height:30px;padding:6px 10px}.combat-view-toolbar{top:57px;left:50%;transform:translateX(-50%)}}

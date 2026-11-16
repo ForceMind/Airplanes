@@ -54,7 +54,7 @@ New methods:
 | `getFlightState()` | Returns a copy containing `x, y, z, yaw, pitch, roll, vx, vy, speed, time`. `roll` includes a current stunt. The caller cannot modify the internal plane by editing this copy. |
 | `projectPoint(x, y, z)` | Returns `x, y, depth, scale, visible` in final low-resolution screen pixels. `visible` describes the camera/frame, not terrain occlusion. |
 | `isPointVisible(screenX, screenY, depth)` | Tests the most recently rendered world depth; false before the first render, after resize until render, for non-finite values or out-of-frame pixels. |
-| `drawActors(actors)` | Draws the complete external actor list into the current buffer and returns that same RGBA array. Battle v1 supports the settled overhead view only; this is a no-op during chase/cockpit views or camera transitions. |
+| `drawActors(actors)` | Draws the complete external actor list into the current buffer and returns that same RGBA array. Since v0.3 this uses final screen projection in all three views and transitions, including player opacity and actor/world depth. |
 
 Actor shape:
 

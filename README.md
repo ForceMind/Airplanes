@@ -1,12 +1,12 @@
 # Airplanes
 
-**一座机库，两种飞行体验。** 在原版像素海岛上自在飞行，或者驾驶英国与德国的螺旋桨战斗机，进入 1940 风格的海峡空战。
+**一座机库，三种飞行体验。** 在原版像素海岛上自在飞行，或者驾驶英国与德国的螺旋桨战斗机，进入 1940 风格的海峡空战。
 
-This repository preserves Dash's Fly demonstration and adds an original, playable RAF / Luftwaffe arcade-combat mode. See [third-party notices](THIRD_PARTY_NOTICES.md) before reusing upstream code.
+This repository preserves Dash's Fly demonstration, integrates the user-selected Fighter + Guns v9 combat fork locally, and adds a distinct RAF / Luftwaffe arcade-combat mode. See [third-party notices](THIRD_PARTY_NOTICES.md) before reusing upstream code.
 
-[打开开发试玩](https://airplanes-skies-1940.kenneth42.chatgpt.site)（当前仅项目所有者可访问）。
+[打开开发试玩](https://airplanes-skies-1940.kenneth42.chatgpt.site)（仅项目所有者可访问；该 Site 的最后已确认部署为 0.2.0，本次仓库 0.3.0 尚未同步至该站）。
 
-## 当前版本：0.2.0
+## 当前版本：0.3.0
 
 ### 净空体验
 
@@ -15,6 +15,16 @@ This repository preserves Dash's Fly demonstration and adds an original, playabl
 - 白昼、黄昏、夜航；原版加三套自由飞行配色。
 - 原始 revision 35 快照与 SHA-256 记录独立保存在 `vendor/upstream/fly-v35/`。
 - 默认迁移渲染器与原始代码在三种视角做逐像素回归。
+
+### 喷气空战 · Fighter + Guns v9
+
+- 实际整合用户提供的 [ShareHTML 战斗分支](https://2kp1v13.sharehtml.org/)，不是依据截图重写，也不是在线嵌入外站。
+- `modern/index.html` 是仓库内的完整本地运行构建；原始快照及 SHA-256 单独保存在 `vendor/upstream/fighter-guns-v9/`。
+- 保留原生俯视、追尾和座舱切换，默认进入追尾视角；Space / V 和原生触屏 View 按钮均保留。
+- 保留原构建的枪炮、导弹、热诱弹、EMP、光门特殊武器、波次敌人、技能树、成就、三槽存档与自定义按键；并未将这些未来武器加入二战模式。
+- 本地 iframe 隔离两套输入、样式和模拟生命周期，启动/暂停/退出接入统一版本入口；存档命名空间独立，离开模式销毁子页面。
+- 构建无需 Forge 账号或 CDN，正常 `npm run build` 完全离线。React 已包含在上游战斗构建中，不是额外远程依赖。
+- 第二个用户提供的 Forge 分享页仅取得应用外壳，尚未确认其内容与 V9 的对应关系；不将其误称为已导入源码。详见 [融合与来源说明](docs/MODERN_INTEGRATION.md)。
 
 ### 1940 · 海峡空战
 
@@ -27,7 +37,7 @@ This repository preserves Dash's Fly demonstration and adds an original, playabl
 - 三叶螺旋桨绕真实机轴转动，共用机体姿态与深度遮挡；二战模式无喷气尾焰，切换模式时清除旧火焰缓冲。
 - 敌机在实际相机画面外生成，从远处连续飞入；雷达提前提示，不在画面中心刷新。
 - 轻度辅助瞄准、武器过热、受伤、击落、爆炸、雷达、结算和重开。
-- 首版战斗采用俯视视角；净空体验保留三视角。
+- 支持俯视、追尾、座舱和连续镜头过渡；切镜头不重置战斗。座舱采用新增的简化活塞机仪表框，不冒充精确历史座舱。
 - 桌面键鼠、手机摇杆与射击/加速按钮；暂停、离开页面自动暂停；可选程序生成音效。
 
 机型尺寸、三叶桨与武器布局有明确参考，见 [机型参考与建模边界](docs/AIRCRAFT_REFERENCE.md)。像素模型仍是按参考制作的低分辨率近似，不是扫描模型。玩法为街机设定，任务为虚构情景；每型包含历史风格及明确标注的创意涂装。当前不包含联网多人、精确飞行性能模拟、真实英吉利海峡地形或正式战役还原。
@@ -50,10 +60,11 @@ npm run dev
 npm run build
 ```
 
-把 `dist/` 放到任意支持静态文件的服务器即可。游戏自身不调用第三方 CDN，不依赖 Forge 账号、React 运行时或后端服务。URL 入口：
+把 `dist/` 放到任意支持静态文件的服务器即可。游戏自身不调用第三方 CDN，不依赖 Forge 账号、远程运行时或后端服务。URL 入口：
 
 - `/#home`：版本选择。
 - `/#free`：净空体验。
+- `/#modern`：完整本地喷气空战。
 - `/#hangar`：二战机库。
 - `/#combat`：按本地选项开始空战。
 
@@ -68,8 +79,10 @@ npm run build
 | 加速 | Shift / 按住鼠标 / 触摸加速 | Shift / 触摸加速 |
 | 射击 | 无战斗 | 按住空格 / 鼠标左键 / 触摸射击 |
 | 翻滚 | 点击鼠标 / 触摸翻滚 | 随转向侧倾 |
-| 视角 | 空格 / 视角按钮 | 首版固定俯视 |
+| 视角 | 空格 / V / 视角按钮 | V / 视角按钮 |
 | 暂停 | P / Esc / 暂停按钮 | P / Esc / 暂停按钮 |
+
+喷气空战使用上游自己的输入：**F 枪炮、R 导弹、Q EMP、E 热诱弹、Space / V 切视角、P / Esc 暂停**。可在原生暂停菜单调整按键并保存/读取战局。二战模式空格仍用于射击，切视角用 V，避免冲突。
 
 ## 项目结构
 
@@ -82,6 +95,10 @@ src/game/aircraft.js         两种二战飞机的独立几何与涂装
 src/game/aircraft-specs.js   型号、尺寸、螺旋桨与武器安装点
 src/game/ordnance.js         共用枪口变换与街机弹道参数
 src/engine/propeller.js      三叶桨几何与时间驱动旋转
+modern/                      本地化的完整 V9 构建与生命周期桥
+src/game/modern-host.js      统一入口与本地运行容器
+src/game/piston-cockpit.js   二战简化座舱框与实时仪表
+scripts/import-modern.mjs  校验快照后可重复生成运行构建
 src/game/audio.js            程序音效
 src/game/preferences.js      本地选择与成绩
 vendor/upstream/fly-v35/     原始快照与清单
@@ -114,4 +131,4 @@ npm run test:browser
 
 ## 继续研发
 
-请先阅读 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。当前版本可实际游玩；后续优先实机手感、机体受损效果、关卡与地形扩展，再评估战斗追尾视角和多人服务。不要把后续候选功能表述为已交付。
+请先阅读 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。当前版本可实际游玩；后续优先实机手感、机体受损效果、关卡与地形扩展，精修历史座舱并评估多人服务。不要把后续候选功能表述为已交付。

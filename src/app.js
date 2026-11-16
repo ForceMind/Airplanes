@@ -6,6 +6,8 @@ import { getAircraftSpec } from './game/aircraft-specs.js';
 import { createCombat, MISSIONS } from './game/combat.js';
 import { readSelection, saveSelection, saveRecord } from './game/preferences.js';
 import { createAudio } from './game/audio.js';
+import { createModernHost } from './game/modern-host.js';
+import { drawPistonCockpit } from './game/piston-cockpit.js';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -15,6 +17,7 @@ const clock = seconds => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:$
 const safeStore = () => { try { return window.localStorage; } catch { return null; } };
 const selection = readSelection(safeStore());
 const audio = createAudio();
+const modernHost = createModernHost($('#modern-screen'));
 const canvas = $('#game-canvas'), context = canvas.getContext('2d', { alpha: false });
 const effectsCanvas = $('#effects-canvas'), effectsContext = effectsCanvas.getContext('2d');
 const fireCanvas = $('#flame-canvas');
@@ -52,6 +55,7 @@ const sourceParams = {
 
 Object.defineProperty(window, '__airplanesDebug', { get: () => ({
   mode, paused, state: combat?.state || null, pose: scene?.getFlightState() || null, frames,
+  view: scene?.view || null, camera: scene?.getCameraState() || null,
   aircraftId: playerModel?.id || null, flameCount: scene?.flames.count || 0,
   aircraftSpec: getAircraftSpec(selectedAircraft().id),
 }) });
@@ -176,6 +180,15 @@ function startHero() {
 function stopHero() { if (heroFrame) cancelAnimationFrame(heroFrame); heroFrame = 0; }
 function route() {
   const hash = location.hash.slice(1);
+  if (hash === 'modern') {
+    if (mode !== 'modern') {
+      stopHero(); stopHangarPreview(); stopGame(); mode = 'modern';
+      $('#home-screen').hidden = true; $('#hangar-screen').hidden = true; $('#game-screen').hidden = true;
+      document.body.classList.add('is-playing'); modernHost.start();
+    }
+    return;
+  }
+  modernHost.stop();
   if (hash === 'free' || hash === 'combat') { if (mode !== hash) startGame(hash); return; }
   if (hash === 'versions' && mode === 'home') return;
   stopGame(); mode = hash === 'hangar' ? 'hangar' : 'home';
@@ -224,13 +237,15 @@ async function startGame(nextMode) {
   frameTime = 0; lastHUD = 0; oldKills = 0; previousHealth = 100; lastShotCount = 0;
   $('#home-screen').hidden = true; $('#hangar-screen').hidden = true; $('#game-screen').hidden = false;
   $('#loading-panel').hidden = false; $('#pause-panel').hidden = true; $('#result-panel').hidden = true;
-  $('#combat-hud').hidden = mode !== 'combat'; $('#free-toolbar').hidden = mode !== 'free';
+  $('#combat-hud').hidden = mode !== 'combat'; $('#free-toolbar').hidden = false;
+  $('#change-time').hidden = mode !== 'free'; $('#change-free-skin').hidden = mode !== 'free';
+  $('#free-toolbar').classList.toggle('combat-view-toolbar', mode === 'combat');
   fireCanvas.hidden = mode !== 'free';
   $('#touch-fire').hidden = mode !== 'combat'; $('#touch-roll').hidden = mode !== 'free';
   $('#error-banner').hidden = true; document.body.classList.add('is-playing');
   $('#mode-title').textContent = mode === 'free' ? '净空体验' : '1940 · 海峡空战';
   $('#mode-subtitle').textContent = mode === 'free' ? 'CLEAR SKIES' : `${selection.faction === 'raf' ? 'ROYAL AIR FORCE' : 'LUFTWAFFE'} / ${selectedAircraft().name.split('·')[0]}`;
-  $('#desktop-hint').textContent = mode === 'free' ? 'WASD / 方向键操控 · Shift 加速 · 空格切换视角 · 点击翻滚 · P 暂停' : 'A D / ← → 转向 · W S / ↑ ↓ 升降 · 空格 / 按住鼠标射击 · Shift 加速 · P 暂停';
+  $('#desktop-hint').textContent = mode === 'free' ? 'WASD / 方向键操控 · Shift 加速 · 空格切换视角 · 点击翻滚 · P 暂停' : 'A D / ← → 转向 · W S / ↑ ↓ 升降 · 空格 / 按住鼠标射击 · Shift 加速 · V 切换视角 · P 暂停';
   $('#change-view').textContent = '视角：俯视'; $('#change-time').textContent = '时段：白昼'; $('#change-free-skin').textContent = '涂装：原版';
   // Let the loading state paint before the deterministic world is generated.
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -250,7 +265,7 @@ async function startGame(nextMode) {
       scene.render();
       combat = createCombat({
         faction: selection.faction, difficulty: selection.difficulty, mission: selection.mission, seed: 7,
-        getView: () => ({ width: scene.width, height: scene.height, project: (x, y, z) => scene.projectPoint(x, y, z) }),
+        getView: () => ({ view: scene.view, width: scene.width, height: scene.height, project: (x, y, z) => scene.projectPoint(x, y, z) }),
       });
       combat.initialize(scene.getFlightState());
       $('#mission-hud-title').textContent = selectedMission().name || selectedMission().title;
@@ -269,7 +284,7 @@ function worldPoint(x, y, z, pose) { return { x: pose.x + wrappedDelta(x - pose.
 function projectWorld(x, y, z, pose) { const p = worldPoint(x, y, z, pose); return scene.projectPoint(p.x, p.y, p.z); }
 function actorFor(entity, model, pose) {
   return { ...entity, ...worldPoint(entity.x, entity.y, entity.z, pose), model,
-    scale: getAircraftSpec(model.id).modelScale, time: pose.time };
+    scale: getAircraftSpec(model.id).modelScale, time: pose.time, isPlayer: entity === pose };
 }
 function frame(now) {
   frameId = 0;
@@ -360,6 +375,7 @@ function drawCombatEffects(pose) {
   const hitAge = combat.state.elapsed - (combat.state.player.lastHitAt ?? -100);
   if (hitAge >= 0 && hitAge < .35) { ctx.fillStyle = `rgba(196,63,38,${(.35 - hitAge) * .24})`; ctx.fillRect(0, 0, effectsCanvas.width, effectsCanvas.height); }
   drawRadar(pose);
+  drawPistonCockpit(ctx, effectsCanvas.width, effectsCanvas.height, pose, scene.getCameraState(), selection.faction);
 }
 function drawRadar(pose) {
   const ctx = radarContext, n = 132, c = n / 2, radius = 58;
@@ -400,7 +416,8 @@ function updateHUD(pose) {
     $('#kills-label').textContent = String(p.kills).padStart(2, '0'); $('#score-label').textContent = String(state.score).padStart(4, '0');
     $('#mission-progress').textContent = state.waveCountdown > 0 ? `下一波 ${Math.ceil(state.waveCountdown)} 秒` : selection.mission === 'survival' ? `坚守 ${Math.max(0, 180 - Math.floor(state.elapsed))} 秒` : `第 ${state.wave} / ${state.waveTotal} 波 · 剩余 ${state.enemies.length}`;
     $('#mission-timer').textContent = clock(state.elapsed);
-  } else $('#change-view').textContent = `视角：${{ top: '俯视', chase: '追尾', cockpit: '座舱' }[scene.view]}`;
+  }
+  $('#change-view').textContent = `视角：${{ top: '俯视', chase: '追尾', cockpit: '座舱' }[scene.view]}`;
 }
 function finishCombat() {
   resultShown = true; clearInput(); const state = combat.state, won = state.status === 'won';
@@ -444,7 +461,9 @@ window.addEventListener('keydown', event => {
   if (event.code === 'KeyP' || event.code === 'Escape') { event.preventDefault(); if (!event.repeat) togglePause(); return; }
   if (paused || resultShown) return;
   if (flightKeys.has(event.code)) { event.preventDefault(); held.add(event.code); }
-  if (event.code === 'Space' && mode === 'free' && !event.repeat) scene.toggleView();
+  if ((event.code === 'KeyV' || (event.code === 'Space' && mode === 'free')) && !event.repeat) {
+    event.preventDefault(); scene.toggleView();
+  }
 });
 window.addEventListener('keyup', event => { held.delete(event.code); });
 window.addEventListener('blur', () => { clearInput(); if (scene) togglePause(true); });
@@ -485,8 +504,8 @@ $('#joystick').addEventListener('pointerdown', event => { if (paused || resultSh
 $('#joystick').addEventListener('pointermove', event => { if (joystick.pointer === event.pointerId) { updateJoystick(event); event.preventDefault(); } });
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) $('#joystick').addEventListener(type, event => { if (joystick.pointer !== event.pointerId) return; joystick.pointer = null; joystick.x = 0; joystick.y = 0; $('#joystick-thumb').style.transform = ''; });
 
-const help = `<h2 class="info-title">飞行操作指南</h2><section class="info-section"><h3>净空体验</h3><p>移动鼠标选择航向，点击翻滚，按住鼠标或 <kbd>Shift</kbd> 加速。<kbd>空格</kbd> 在俯视、追尾和座舱之间切换。也可以用 <kbd>WASD</kbd> 或方向键操控；保留原版飞行杆方向：向下拉升、向上俯冲。</p></section><section class="info-section"><h3>1940 · 海峡空战</h3><p><kbd>A D</kbd> / <kbd>← →</kbd> 转向，<kbd>W S</kbd> / <kbd>↑ ↓</kbd> 升降。按住 <kbd>空格</kbd> 或鼠标左键射击，<kbd>Shift</kbd> 加速。把前方瞄准环指向敌机；连续射击会过热，短点射更有效。</p><p>雷达中心是你的位置，红点是敌机。敌机会从画面外飞入，随后追击、开火和脱离。喷火式以八挺翼枪齐射，Bf 109 E-4 同时使用两挺机枪和两门机炮。曳光弹间隔出现，留意机体耐久。<kbd>P</kbd> / <kbd>Esc</kbd> 暂停。</p></section><section class="info-section"><h3>手机与平板</h3><p>左侧摇杆转向与升降，右侧按钮射击和加速；净空模式提供翻滚按钮。横屏能获得更宽的视野。切到后台会自动暂停。</p></section>`;
-const credits = `<h2 class="info-title">关于 Airplanes</h2><section class="info-section"><h3>两种飞行体验</h3><p>净空体验迁移自 Dash 的 Fly / fighter 演示。海峡空战在这个像素渲染基础上加入独立的二战飞机、涂装、战斗系统与任务。</p></section><section class="info-section"><h3>来源与署名</h3><p>原版作者：Dash / @creativedash。<a href="https://remix.ui8.ai/fly" target="_blank" rel="noreferrer">原分享页</a> · <a href="./THIRD_PARTY_NOTICES.md" target="_blank">第三方说明</a></p><p>Airplanes 新增玩法、界面、程序化机型与涂装由 ForceMind 项目维护。原版源码保留其作者权利与来源，不被重新标记为本项目原创。</p></section><section class="info-section"><h3>机型与玩法</h3><p>V0.2 按喷火式 Mk Ia 与 Bf 109 E-4 的机体比例、三叶桨和武器配置制作像素模型，机库可查看枪位。<a href="./docs/AIRCRAFT_REFERENCE.md" target="_blank">机型参考与建模说明 ↗</a></p><p>本版提供单人对 AI 的街机空战，飞行、伤害与武器散热为游戏设定。任务为虚构情景，创意涂装已标注；不包含联网多人或精确飞行模拟。</p><a href="https://github.com/ForceMind/Airplanes" target="_blank" rel="noreferrer">访问项目仓库 ↗</a></section>`;
+const help = `<h2 class="info-title">飞行操作指南</h2><section class="info-section"><h3>净空体验</h3><p>移动鼠标选择航向，点击翻滚，按住鼠标或 <kbd>Shift</kbd> 加速。<kbd>空格</kbd> 在俯视、追尾和座舱之间切换。也可以用 <kbd>WASD</kbd> 或方向键操控；保留原版飞行杆方向：向下拉升、向上俯冲。</p></section><section class="info-section"><h3>1940 · 海峡空战</h3><p><kbd>A D</kbd> / <kbd>← →</kbd> 转向，<kbd>W S</kbd> / <kbd>↑ ↓</kbd> 升降。按住 <kbd>空格</kbd> 或鼠标左键射击，<kbd>Shift</kbd> 加速，<kbd>V</kbd> 切换俯视、追尾、座舱。把前方瞄准环指向敌机；连续射击会过热，短点射更有效。</p><p>雷达中心是你的位置，红点是敌机。敌机会从画面外飞入，随后追击、开火和脱离。喷火式以八挺翼枪齐射，Bf 109 E-4 同时使用两挺机枪和两门机炮。曳光弹间隔出现，留意机体耐久。<kbd>P</kbd> / <kbd>Esc</kbd> 暂停。</p></section><section class="info-section"><h3>喷气空战 V9</h3><p>F 机炮、R 导弹、E 热诱弹、Q EMP；Space / V 切换视角，滚轮缩放。技能树、成就、键位和三个存档槽使用原分支界面。该模式完全本地运行，存档独立。</p></section><section class="info-section"><h3>手机与平板</h3><p>左侧摇杆转向与升降，右侧按钮射击和加速；净空模式提供翻滚按钮。横屏能获得更宽的视野。切到后台会自动暂停。</p></section>`;
+const credits = `<h2 class="info-title">关于 Airplanes</h2><section class="info-section"><h3>三种飞行体验</h3><p>净空体验迁移自 Dash 的 Fly / fighter 演示。喷气空战完整迁入用户提供的 Fighter + Guns v9 战斗分支，保留原生三视角与成长系统。海峡空战使用独立的二战飞机、涂装与战斗规则。</p></section><section class="info-section"><h3>来源与署名</h3><p>原版作者：Dash / @creativedash。<a href="https://remix.ui8.ai/fly" target="_blank" rel="noreferrer">原分享页</a> · <a href="./THIRD_PARTY_NOTICES.md" target="_blank">第三方说明</a></p><p>Airplanes 新增玩法、界面、程序化机型与涂装由 ForceMind 项目维护。原版源码保留其作者权利与来源，不被重新标记为本项目原创。</p></section><section class="info-section"><h3>机型与玩法</h3><p>V0.2 按喷火式 Mk Ia 与 Bf 109 E-4 的机体比例、三叶桨和武器配置制作像素模型，机库可查看枪位。<a href="./docs/AIRCRAFT_REFERENCE.md" target="_blank">机型参考与建模说明 ↗</a></p><p>本版提供单人对 AI 的街机空战，飞行、伤害与武器散热为游戏设定。任务为虚构情景，创意涂装已标注；不包含联网多人或精确飞行模拟。二战座舱为风格化通用仪表，不宣称是史实座舱复刻。</p><a href="https://github.com/ForceMind/Airplanes" target="_blank" rel="noreferrer">访问项目仓库 ↗</a></section>`;
 $$('[data-action="help"]').forEach(button => button.addEventListener('click', () => { $('#info-content').innerHTML = help; $('#info-dialog').showModal(); }));
 $$('[data-action="credits"]').forEach(button => button.addEventListener('click', () => { $('#info-content').innerHTML = credits; $('#info-dialog').showModal(); }));
 $('.dialog-close').addEventListener('click', () => $('#info-dialog').close());
