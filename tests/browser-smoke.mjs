@@ -284,10 +284,18 @@ async function checkMobile(url) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, locale: 'zh-CN', colorScheme: 'dark' });
   mobile = await context.newPage();
   monitor(mobile, 'mobile');
+  const session = await context.newCDPSession(mobile);
+  // Chromium 151 CI can lose the context's hasTouch emulation after full-page
+  // screenshots. Re-declare the actual emulated device through CDP; never mock
+  // navigator or force the application's controls visible. The same session
+  // dispatches the real touch events used by the joystick and fire checks.
+  const enableTouchDevice = () => session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+  await enableTouchDevice();
   await mobile.goto(url, { waitUntil: 'domcontentloaded' });
   await waitMode(mobile, 'home');
   await noHorizontalOverflow(mobile, 'mobile home');
   await snapshot(mobile, 'home-mobile', true);
+  await enableTouchDevice();
   await mobile.locator('.battle-card a[href="#hangar"]').tap();
   await waitMode(mobile, 'hangar');
   await mobile.locator('[data-faction="luftwaffe"]').tap();
@@ -295,6 +303,7 @@ async function checkMobile(url) {
   await mobile.locator('#skin-options button').nth(2).tap();
   await noHorizontalOverflow(mobile, 'mobile hangar');
   await snapshot(mobile, 'hangar-mobile', true);
+  await enableTouchDevice();
   await mobile.locator('#start-combat').tap();
   await waitGame(mobile, 'combat');
   report.mobileInput = await mobileInputDiagnostics(mobile);
@@ -312,7 +321,6 @@ async function checkMobile(url) {
   }
   await noHorizontalOverflow(mobile, 'mobile combat');
   await verifyCanvas(mobile, 'combat/mobile');
-  const session = await context.newCDPSession(mobile);
   const yawBefore = await mobile.evaluate(() => window.__airplanesDebug.pose.yaw);
   await touchHold(mobile, session, '#joystick', async (point) => {
     await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...point, x: point.x + 35 }] });
