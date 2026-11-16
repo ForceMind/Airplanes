@@ -1,0 +1,27 @@
+name: Inspect supplied Forge project
+on:
+  push:
+    branches: [dev]
+    paths: ['.github/workflows/forge-inspect.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read public share route dependencies
+        shell: python
+        run: |
+          import pathlib, urllib.request
+          out=pathlib.Path('forge-review');out.mkdir()
+          for name in ['projects-ByEUGV7m.js','share._fragmentId-C6Gxy175.js','share._fragmentId-C_86eqVG.js']:
+              url='https://forge.ui8.ai/assets/'+name
+              with urllib.request.urlopen(url,timeout=30) as r: data=r.read(4000000)
+              (out/name).write_bytes(data)
+              print(name,len(data))
+      - uses: actions/upload-artifact@v5
+        with:
+          name: forge-share-inspection
+          path: forge-review/
+          retention-days: 3
