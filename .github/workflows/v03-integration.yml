@@ -1,0 +1,78 @@
+name: Verify and assemble Airplanes v0.3
+on:
+  push:
+    branches: [dev]
+    paths: ['.integration/**', '.github/workflows/v03-integration.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: airplanes-v03-integration
+  cancel-in-progress: false
+jobs:
+  integrate:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Verify and apply reviewed implementation
+        shell: python
+        run: |
+          import base64, gzip, hashlib, pathlib, subprocess
+          encoded = ''.join(pathlib.Path('.integration/v03-'+str(i)+'.b64').read_text().strip() for i in range(1,5))
+          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '29f6ea6b2c4203f2788d817d4f846d649fb0298a8a041e8094f0008c23dd3964', 'Reviewed patch integrity mismatch'
+          target = pathlib.Path('/tmp/airplanes-v03.patch'); target.write_bytes(patch)
+          subprocess.run(['git','apply','--check',str(target)], check=True)
+          subprocess.run(['git','apply',str(target)], check=True)
+      - name: Import the exact reviewed public combat build
+        run: node scripts/import-modern.mjs --download
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: airplanes-v03-browser-review
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Commit tested integration to dev only
+        if: success()
+        run: |
+          rm -rf .integration
+          rm -f .github/workflows/upstream-capture.yml .github/workflows/forge-inspect.yml .github/workflows/v03-integration.yml
+          git add README.md THIRD_PARTY_NOTICES.md docs index.html package.json package-lock.json src scripts tests modern vendor/upstream/fighter-guns-v9 .github/workflows
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Integrate local Fighter + Guns v9 and enable WWII three-view combat'
+          git push origin HEAD:dev
+          git rev-parse HEAD > test-results/source-commit.txt
+      - name: Package prepared source for independent review
+        if: always()
+        shell: python
+        run: |
+          import pathlib, tarfile
+          with tarfile.open('/tmp/airplanes-v03-source.tar.gz','w:gz') as archive:
+              for p in pathlib.Path('.').iterdir():
+                  if p.name not in ('.git','node_modules','dist','test-results','.integration'):
+                      archive.add(p,arcname=p.name)
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: airplanes-v03-source
+          path: /tmp/airplanes-v03-source.tar.gz
+          retention-days: 14
+      - uses: actions/upload-artifact@v5
+        if: success()
+        with:
+          name: airplanes-static-v0.3.0
+          path: dist/
+          retention-days: 30
