@@ -1,5 +1,7 @@
 # Airplanes 研发基线
 
+主代码以 `ForceMind/Airplanes` 的 `main` 分支为准。当前私有开发试玩为 https://airplanes-skies-1940.kenneth42.chatgpt.site ，对应已有 Site `appgprj_6afb1d38373c8191bdee898737c387f6`。发布后续版本时更新这个 Site，并保持所有者私有访问；不要为一次常规修改另建站点。
+
 ## 已确定的产品边界
 
 1. 版本入口同时提供“净空体验”和“1940 · 海峡空战”。

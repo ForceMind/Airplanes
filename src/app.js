@@ -18,6 +18,12 @@ const effectsCanvas = $('#effects-canvas'), effectsContext = effectsCanvas.getCo
 const fireCanvas = $('#flame-canvas');
 const radarContext = $('#radar-canvas').getContext('2d');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const coarsePointer = matchMedia('(any-pointer: coarse)');
+function updateInputMode() {
+  document.documentElement.classList.toggle('touch-input', navigator.maxTouchPoints > 0 || coarsePointer.matches);
+}
+updateInputMode();
+coarsePointer.addEventListener('change', updateInputMode);
 let mode = 'home', scene = null, combat = null, paused = false, frameId = 0, frames = 0;
 let image = null, flameLayer = null, params = null, lastFrame = 0, frameTime = 0, lastHUD = 0, resultShown = false;
 let runToken = 0, previewAngle = -.5, playerModel = null, enemyModel = null, pointerPressed = false;
@@ -218,7 +224,8 @@ function frame(now) {
   frameId = 0;
   if (!scene || !['free', 'combat'].includes(mode)) return;
   try {
-    const dt = clamp((now - lastFrame) / 1000, 0, .05); lastFrame = now;
+    const wallDt = Math.max(0, (now - lastFrame) / 1000);
+    const dt = clamp(wallDt, 0, .05); lastFrame = now;
     if (!paused && !resultShown) {
       frameTime += dt;
       const turn = clamp((held.has('ArrowRight') || held.has('KeyD') ? 1 : 0) - (held.has('ArrowLeft') || held.has('KeyA') ? 1 : 0) + joystick.x, -1, 1);
@@ -238,7 +245,7 @@ function frame(now) {
       if (combat) { drawCombatEffects(pose); processEvents(); }
       else effectsContext.clearRect(0, 0, effectsCanvas.width, effectsCanvas.height);
       frames++;
-      fps += ((dt > 0 ? 1 / dt : 60) - fps) * .03;
+      fps += ((wallDt > 0 ? 1 / wallDt : 60) - fps) * .03;
       if (now - lastHUD > 90) { updateHUD(pose); lastHUD = now; }
       audio.flight(pose.speed, true);
       if (combat && combat.state.status !== 'playing') finishCombat();

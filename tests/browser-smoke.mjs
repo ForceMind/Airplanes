@@ -255,6 +255,31 @@ async function touchHold(page, session, selector, action) {
   finally { await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); }
 }
 
+async function mobileInputDiagnostics(page) {
+  return page.evaluate(() => ({
+    maxTouchPoints: navigator.maxTouchPoints,
+    touchEventAvailable: 'ontouchstart' in window,
+    pointerCoarse: matchMedia('(pointer: coarse)').matches,
+    anyPointerCoarse: matchMedia('(any-pointer: coarse)').matches,
+    hoverNone: matchMedia('(hover: none)').matches,
+    viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
+    htmlClass: document.documentElement.className,
+    bodyClass: document.body.className,
+    controls: Object.fromEntries(['#touch-controls', '#joystick', '#touch-fire', '#touch-boost'].map(selector => {
+      const el = document.querySelector(selector);
+      if (!el) return [selector, { missing: true }];
+      const css = getComputedStyle(el), rect = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return [selector, {
+        hidden: el.hidden, display: css.display, visibility: css.visibility,
+        opacity: css.opacity, pointerEvents: css.pointerEvents,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        receivesCentreHit: Boolean(hit && (hit === el || el.contains(hit))),
+      }];
+    })),
+  }));
+}
+
 async function checkMobile(url) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, locale: 'zh-CN', colorScheme: 'dark' });
   mobile = await context.newPage();
@@ -272,10 +297,18 @@ async function checkMobile(url) {
   await snapshot(mobile, 'hangar-mobile', true);
   await mobile.locator('#start-combat').tap();
   await waitGame(mobile, 'combat');
-  for (const selector of ['#touch-controls', '#joystick', '#touch-fire', '#touch-boost']) await visible(mobile, selector);
+  report.mobileInput = await mobileInputDiagnostics(mobile);
+  assert.ok(report.mobileInput.maxTouchPoints > 0, `Mobile context advertises touch input: ${JSON.stringify(report.mobileInput)}`);
+  // Fail promptly with capability/CSS evidence instead of letting an obscured
+  // control time out while the unpiloted aircraft is attacked by the AI.
+  for (const selector of ['#touch-controls', '#joystick', '#touch-fire', '#touch-boost']) {
+    assert.ok(await mobile.locator(selector).isVisible(), `Mobile control must be visible: ${selector}; ${JSON.stringify(report.mobileInput)}`);
+  }
   for (const selector of ['#joystick', '#touch-fire', '#touch-boost']) {
     const box = await mobile.locator(selector).boundingBox();
+    assert.ok(box && box.width >= 44 && box.height >= 44, `Mobile control has a usable touch target: ${selector}`);
     assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= 391 && box.y + box.height <= 845, `Mobile control stays in viewport: ${selector}`);
+    assert.ok(report.mobileInput.controls[selector].receivesCentreHit, `Mobile control must receive touches at its centre: ${selector}; ${JSON.stringify(report.mobileInput.controls[selector])}`);
   }
   await noHorizontalOverflow(mobile, 'mobile combat');
   await verifyCanvas(mobile, 'combat/mobile');

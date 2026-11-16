@@ -4,6 +4,8 @@
 
 This repository preserves Dash's Fly demonstration and adds an original, playable RAF / Luftwaffe arcade-combat mode. See [third-party notices](THIRD_PARTY_NOTICES.md) before reusing upstream code.
 
+[打开开发试玩](https://airplanes-skies-1940.kenneth42.chatgpt.site)（当前仅项目所有者可访问）。
+
 ## 当前版本：0.1.0
 
 ### 净空体验
